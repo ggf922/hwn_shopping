@@ -1,0 +1,18 @@
+{
+  "name": "hawonnara",
+  "version": "1.0.0",
+  "description": "하원나라 상품권 발권 및 쇼핑몰 시스템",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "keywords": ["voucher", "giftcard", "shop"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "better-sqlite3": "^11.3.0",
+    "canvas": "^2.11.2"
+  }
+}

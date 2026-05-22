@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>하원나라 - 프리미엄 쇼핑몰</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <h1 class="logo">하원나라 <span>HAWONNARA</span></h1>
+      <nav>
+        <a href="/" class="active">쇼핑몰</a>
+        <a href="/admin">관리자</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container">
+      <h2>프리미엄 상품권으로 누리는 특별한 쇼핑</h2>
+      <p>하원나라 상품권 한 장으로, 정성스러운 선물을 만나보세요.</p>
+    </div>
+  </section>
+
+  <main class="container main-content">
+    <!-- 상품권 사용 영역 -->
+    <section class="voucher-section card">
+      <h3>🎁 상품권 사용하기</h3>
+      <div class="voucher-input">
+        <input
+          type="text"
+          id="voucher-serial-input"
+          placeholder="상품권 번호 입력 (예: HWN-2026-AF93875)"
+          autocomplete="off"
+        />
+        <button id="check-voucher-btn" class="btn btn-primary">확인</button>
+      </div>
+      <div id="voucher-status" class="voucher-status hidden"></div>
+    </section>
+
+    <!-- 제품 목록 -->
+    <section class="products-section">
+      <h3>📦 판매 중인 제품</h3>
+      <div id="products-grid" class="products-grid">
+        <div class="loading">불러오는 중...</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 구매 모달 -->
+  <div id="purchase-modal" class="modal hidden">
+    <div class="modal-content">
+      <button class="modal-close" id="modal-close">&times;</button>
+      <h3>제품 구매</h3>
+      <div id="modal-product-info"></div>
+      <div class="form-row">
+        <label>수량</label>
+        <input type="number" id="purchase-quantity" value="1" min="1" />
+      </div>
+      <div class="total-line">
+        <span>결제 금액</span>
+        <strong id="purchase-total">0원</strong>
+      </div>
+      <div class="total-line">
+        <span>상품권 잔액</span>
+        <strong id="purchase-balance">0원</strong>
+      </div>
+      <button id="confirm-purchase-btn" class="btn btn-primary btn-block">구매하기</button>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>© 2026 하원나라 (HAWONNARA). All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="/js/shop.js"></script>
+</body>
+</html>
