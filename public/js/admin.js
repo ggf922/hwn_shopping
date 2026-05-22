@@ -176,10 +176,10 @@
     container.classList.remove('hidden');
     grid.innerHTML = vouchers.map(v => `
       <div class="voucher-preview">
-        <img src="/api/vouchers/${v.serial}/image" alt="${v.serial}" loading="lazy" />
+        <img src="/api/vouchers/${v.serial}/image?t=${Date.now()}" alt="${v.serial}" loading="lazy" />
         <div class="serial">${v.serial}</div>
         <div style="color:#666;font-size:0.85rem;margin-bottom:8px">${fmt(v.amount)}</div>
-        <a href="/api/vouchers/${v.serial}/image?download=1"
+        <a href="/api/vouchers/${v.serial}/image?download=1&t=${Date.now()}"
            class="btn btn-success btn-sm"
            download="${v.serial}.png">⬇ 이미지 다운로드</a>
       </div>
@@ -210,8 +210,8 @@
           <td>${fmtDate(v.issued_at)}</td>
           <td>
             <div class="action-buttons">
-              <a class="btn btn-secondary btn-sm" href="/api/vouchers/${v.serial}/image" target="_blank">미리보기</a>
-              <a class="btn btn-success btn-sm" href="/api/vouchers/${v.serial}/image?download=1" download="${v.serial}.png">⬇ 다운로드</a>
+              <a class="btn btn-secondary btn-sm" href="/api/vouchers/${v.serial}/image?t=${Date.now()}" target="_blank">미리보기</a>
+              <a class="btn btn-success btn-sm" href="/api/vouchers/${v.serial}/image?download=1&t=${Date.now()}" download="${v.serial}.png">⬇ 다운로드</a>
               <button class="btn btn-danger btn-sm delete-voucher" data-serial="${v.serial}">삭제</button>
             </div>
           </td>

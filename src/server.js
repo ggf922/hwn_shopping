@@ -266,6 +266,10 @@ app.get('/api/vouchers/:serial/image', async (req, res) => {
 
     const buffer = await renderVoucherImage({ serial: row.serial, amount: row.amount });
     res.setHeader('Content-Type', 'image/png');
+    // 캐시 방지 — 렌더링 로직이 바뀌어도 즉시 반영되도록 함
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     if (req.query.download === '1') {
       res.setHeader('Content-Disposition', `attachment; filename="${row.serial}.png"`);
     }
