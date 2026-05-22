@@ -7,6 +7,7 @@ const fs = require('fs');
 const multer = require('multer');
 const db = require('./db');
 const { generateFullSerial, renderVoucherImage } = require('./voucher');
+const auth = require('./auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,7 +40,12 @@ const upload = multer({
 
 // 미들웨어
 app.use(express.json({ limit: '2mb' }));
-app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// /admin 경로는 별도 라우트로 처리하므로 정적 서빙에서 제외 (보안)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/admin')) return next();
+  return express.static(path.join(__dirname, '..', 'public'))(req, res, next);
+});
 
 // 간단한 로깅
 app.use((req, res, next) => {
@@ -48,9 +54,39 @@ app.use((req, res, next) => {
 });
 
 // ─────────────────────────────────────────────
-// 이미지 업로드 API
+// 인증 API
 // ─────────────────────────────────────────────
-app.post('/api/upload', (req, res) => {
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ success: false, error: '아이디와 비밀번호를 입력해주세요.' });
+  }
+  const token = auth.login(username, password);
+  if (!token) {
+    return res.status(401).json({ success: false, error: '아이디 또는 비밀번호가 올바르지 않습니다.' });
+  }
+  res.json({ success: true, data: { token, username } });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const token = auth.extractToken(req);
+  if (token) auth.logout(token);
+  res.json({ success: true });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const token = auth.extractToken(req);
+  const sess = token ? auth.verify(token) : null;
+  if (!sess) {
+    return res.status(401).json({ success: false, error: '인증 필요' });
+  }
+  res.json({ success: true, data: { username: sess.username } });
+});
+
+// ─────────────────────────────────────────────
+// 이미지 업로드 API (관리자 전용)
+// ─────────────────────────────────────────────
+app.post('/api/upload', auth.requireAdmin, (req, res) => {
   upload.single('image')(req, res, (err) => {
     if (err) {
       return res.status(400).json({ success: false, error: err.message });
@@ -88,8 +124,8 @@ app.get('/api/products/:id', (req, res) => {
   }
 });
 
-// 제품 등록
-app.post('/api/products', (req, res) => {
+// 제품 등록 (관리자)
+app.post('/api/products', auth.requireAdmin, (req, res) => {
   try {
     const { name, price, description, image_url, stock } = req.body;
     if (!name || price == null) {
@@ -107,8 +143,8 @@ app.post('/api/products', (req, res) => {
   }
 });
 
-// 제품 수정
-app.put('/api/products/:id', (req, res) => {
+// 제품 수정 (관리자)
+app.put('/api/products/:id', auth.requireAdmin, (req, res) => {
   try {
     const { name, price, description, image_url, stock } = req.body;
     const existing = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
@@ -134,8 +170,8 @@ app.put('/api/products/:id', (req, res) => {
   }
 });
 
-// 제품 삭제
-app.delete('/api/products/:id', (req, res) => {
+// 제품 삭제 (관리자)
+app.delete('/api/products/:id', auth.requireAdmin, (req, res) => {
   try {
     const result = db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
     if (result.changes === 0) return res.status(404).json({ success: false, error: '제품을 찾을 수 없습니다.' });
@@ -152,8 +188,8 @@ app.delete('/api/products/:id', (req, res) => {
 // 발권 가능 금액
 const VALID_AMOUNTS = [10000, 20000, 50000, 100000, 300000, 500000, 1000000];
 
-// 상품권 목록
-app.get('/api/vouchers', (req, res) => {
+// 상품권 목록 (관리자)
+app.get('/api/vouchers', auth.requireAdmin, (req, res) => {
   try {
     const rows = db.prepare('SELECT * FROM vouchers ORDER BY issued_at DESC').all();
     res.json({ success: true, data: rows });
@@ -173,8 +209,8 @@ app.get('/api/vouchers/:serial', (req, res) => {
   }
 });
 
-// 상품권 발권
-app.post('/api/vouchers', (req, res) => {
+// 상품권 발권 (관리자)
+app.post('/api/vouchers', auth.requireAdmin, (req, res) => {
   try {
     const { amount, quantity = 1 } = req.body;
     if (!VALID_AMOUNTS.includes(Number(amount))) {
@@ -212,7 +248,7 @@ app.post('/api/vouchers', (req, res) => {
 });
 
 // 상품권 삭제 (관리자)
-app.delete('/api/vouchers/:serial', (req, res) => {
+app.delete('/api/vouchers/:serial', auth.requireAdmin, (req, res) => {
   try {
     const result = db.prepare('DELETE FROM vouchers WHERE serial = ?').run(req.params.serial);
     if (result.changes === 0) return res.status(404).json({ success: false, error: '상품권을 찾을 수 없습니다.' });
@@ -334,8 +370,8 @@ app.post('/api/orders', (req, res) => {
   }
 });
 
-// 주문 목록
-app.get('/api/orders', (req, res) => {
+// 주문 목록 (관리자)
+app.get('/api/orders', auth.requireAdmin, (req, res) => {
   try {
     const rows = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
     res.json({ success: true, data: rows });
@@ -345,7 +381,7 @@ app.get('/api/orders', (req, res) => {
 });
 
 // 주문 상태 변경 (관리자)
-app.put('/api/orders/:id/status', (req, res) => {
+app.put('/api/orders/:id/status', auth.requireAdmin, (req, res) => {
   try {
     const { status } = req.body;
     const allowed = ['pending', 'preparing', 'shipped', 'delivered', 'cancelled'];
@@ -362,9 +398,20 @@ app.put('/api/orders/:id/status', (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// 라우트
+// 페이지 라우트
 // ─────────────────────────────────────────────
-app.get('/admin', (req, res) => {
+
+// 관리자 로그인 페이지
+app.get('/admin/login', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'admin', 'login.html'));
+});
+
+// 관리자 메인 페이지: 인증 안 되어 있으면 로그인 페이지로 리다이렉트
+app.get(['/admin', '/admin/'], (req, res) => {
+  const token = auth.extractToken(req);
+  if (!token || !auth.verify(token)) {
+    return res.redirect('/admin/login');
+  }
   res.sendFile(path.join(__dirname, '..', 'public', 'admin', 'index.html'));
 });
 

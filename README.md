@@ -2,6 +2,20 @@
 
 프리미엄 상품권 발권 + 쇼핑몰 + 배송 관리 시스템
 
+## 🔐 관리자 로그인
+
+| 항목 | 값 |
+|------|------|
+| URL  | `/admin/login` (또는 `/admin` 접속 시 자동 리다이렉트) |
+| 아이디 | `admin` |
+| 비밀번호 | `admin123` |
+| 세션 유효 시간 | 8시간 |
+
+> ⚠️ 운영 환경에서는 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 환경변수로 변경 가능합니다.
+> ```bash
+> ADMIN_USERNAME=myadmin ADMIN_PASSWORD='S3cret!' npm start
+> ```
+
 ## 주요 기능
 
 ### 🛍️ 쇼핑몰 (사용자)
@@ -54,16 +68,18 @@ npm start
 ```
 webapp/
 ├─ src/
-│  ├─ server.js      # Express 서버 (모든 API + 이미지 업로드)
+│  ├─ server.js      # Express 서버 (모든 API + 이미지 업로드 + 인증)
 │  ├─ db.js          # SQLite 초기화 + 자동 마이그레이션
-│  └─ voucher.js     # 일련번호 생성 + 이미지 렌더링
+│  ├─ voucher.js     # 일련번호 생성 + 이미지 렌더링
+│  └─ auth.js        # 관리자 토큰 기반 인증
 ├─ public/
-│  ├─ index.html         # 쇼핑몰 페이지
-│  ├─ admin/index.html   # 관리자 페이지
+│  ├─ index.html               # 쇼핑몰 페이지
+│  ├─ admin/login.html         # 관리자 로그인 페이지
+│  ├─ admin/index.html         # 관리자 대시보드 (인증 필요)
 │  ├─ css/style.css
-│  ├─ js/shop.js         # 쇼핑몰 로직 (배송정보 폼 포함)
-│  ├─ js/admin.js        # 관리자 로직 (이미지 업로드/주문 관리)
-│  ├─ uploads/           # 업로드된 제품 이미지 저장소
+│  ├─ js/shop.js               # 쇼핑몰 로직 (배송정보 폼 포함)
+│  ├─ js/admin.js              # 관리자 로직 (인증, 이미지 업로드, 주문 관리)
+│  ├─ uploads/                 # 업로드된 제품 이미지 저장소
 │  └─ images/voucher-template.png  # 상품권 템플릿
 ├─ data/             # SQLite DB 파일 (자동 생성)
 ├─ package.json
@@ -72,7 +88,16 @@ webapp/
 
 ## API 엔드포인트
 
-### 업로드
+> 🔒 표시된 API는 `Authorization: Bearer <token>` 헤더가 필요한 관리자 전용 API입니다.
+
+### 인증
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/auth/login` | `{username, password}` → token 발급 |
+| POST | `/api/auth/logout` | 로그아웃 (토큰 무효화) |
+| GET  | `/api/auth/me` | 현재 세션 정보 |
+
+### 업로드 🔒
 | Method | Path | 설명 |
 |--------|------|------|
 | POST | `/api/upload` | 제품 이미지 업로드 (multipart, field name: `image`) |
@@ -82,25 +107,25 @@ webapp/
 |--------|------|------|
 | GET    | `/api/products`        | 제품 목록 |
 | GET    | `/api/products/:id`    | 제품 단건 |
-| POST   | `/api/products`        | 제품 등록 |
-| PUT    | `/api/products/:id`    | 제품 수정 |
-| DELETE | `/api/products/:id`    | 제품 삭제 |
+| POST   | `/api/products`        🔒 | 제품 등록 |
+| PUT    | `/api/products/:id`    🔒 | 제품 수정 |
+| DELETE | `/api/products/:id`    🔒 | 제품 삭제 |
 
 ### 상품권 (Vouchers)
 | Method | Path | 설명 |
 |--------|------|------|
-| GET    | `/api/vouchers`              | 발권 목록 |
-| GET    | `/api/vouchers/:serial`      | 단건 조회 |
-| POST   | `/api/vouchers`              | 발권 (`{amount, quantity}`) |
-| DELETE | `/api/vouchers/:serial`      | 삭제 |
+| GET    | `/api/vouchers`              🔒 | 발권 목록 |
+| GET    | `/api/vouchers/:serial`      | 단건 조회 (구매 시 잔액 확인용) |
+| POST   | `/api/vouchers`              🔒 | 발권 (`{amount, quantity}`) |
+| DELETE | `/api/vouchers/:serial`      🔒 | 삭제 |
 | GET    | `/api/vouchers/:serial/image[?download=1]` | 이미지(PNG) |
 
 ### 주문 (Orders)
 | Method | Path | 설명 |
 |--------|------|------|
-| GET    | `/api/orders`                | 전체 주문 (배송정보 포함) |
+| GET    | `/api/orders`                🔒 | 전체 주문 (배송정보 포함) |
 | POST   | `/api/orders`                | 구매 (배송정보 필수) |
-| PUT    | `/api/orders/:id/status`     | 주문 상태 변경 |
+| PUT    | `/api/orders/:id/status`     🔒 | 주문 상태 변경 |
 
 #### 구매 요청 페이로드 예시
 ```json

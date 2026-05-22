@@ -44,15 +44,73 @@
     setTimeout(() => el.remove(), 3000);
   }
 
+  function getToken() {
+    return localStorage.getItem('admin_token') || '';
+  }
+
+  function clearAuth() {
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_username');
+    document.cookie = 'admin_token=; path=/; max-age=0';
+  }
+
+  function redirectToLogin() {
+    clearAuth();
+    window.location.href = '/admin/login';
+  }
+
   async function api(url, opts = {}) {
-    const res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
-      ...opts
-    });
+    const token = getToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(opts.headers || {}),
+      ...(token ? { Authorization: 'Bearer ' + token } : {})
+    };
+    const res = await fetch(url, { ...opts, headers });
+    if (res.status === 401) {
+      redirectToLogin();
+      throw new Error('인증이 만료되었습니다.');
+    }
     const data = await res.json();
     if (!data.success) throw new Error(data.error || '요청 실패');
     return data.data;
   }
+
+  // 페이지 진입 시 인증 확인
+  (async () => {
+    const token = getToken();
+    if (!token) {
+      redirectToLogin();
+      return;
+    }
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (!res.ok) {
+        redirectToLogin();
+        return;
+      }
+      const data = await res.json();
+      const username = data.data?.username || 'admin';
+      const userInfo = document.getElementById('admin-user-info');
+      if (userInfo) userInfo.textContent = `👤 ${username}`;
+    } catch (e) {
+      redirectToLogin();
+    }
+  })();
+
+  // 로그아웃
+  document.getElementById('logout-btn')?.addEventListener('click', async () => {
+    const token = getToken();
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token }
+      });
+    } catch (e) {}
+    redirectToLogin();
+  });
 
   // ─────────────────────────────────────────
   // 탭 전환
@@ -261,7 +319,16 @@
     uploadBtn.disabled = true;
     uploadBtn.textContent = '⏳ 업로드 중...';
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const token = getToken();
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: fd,
+        headers: token ? { Authorization: 'Bearer ' + token } : {}
+      });
+      if (res.status === 401) {
+        redirectToLogin();
+        return;
+      }
       const json = await res.json();
       if (!json.success) throw new Error(json.error || '업로드 실패');
       $('#product-image').value = json.data.url;

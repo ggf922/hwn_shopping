@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>하원나라 - 관리자</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=3" />
 </head>
 <body>
   <header class="site-header">
@@ -13,6 +13,8 @@
       <nav>
         <a href="/">쇼핑몰</a>
         <a href="/admin" class="active">관리자</a>
+        <span class="admin-user" id="admin-user-info"></span>
+        <button class="btn btn-secondary btn-sm" id="logout-btn">로그아웃</button>
       </nav>
     </div>
   </header>
@@ -174,6 +176,6 @@
     </div>
   </div>
 
-  <script src="/js/admin.js"></script>
+  <script src="/js/admin.js?v=3"></script>
 </body>
 </html>

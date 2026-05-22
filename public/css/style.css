@@ -541,6 +541,99 @@ button { cursor: pointer; font-family: inherit; }
   font-family: inherit;
 }
 
+/* ── 로그인 페이지 ── */
+.login-page {
+  background: linear-gradient(135deg, #0a0a0a, #1a1a1a 50%, #2a2218);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.login-container {
+  width: 100%;
+  max-width: 420px;
+}
+.login-card {
+  background: var(--white);
+  border-radius: 14px;
+  padding: 40px 32px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  border: 1px solid rgba(200,161,74,0.2);
+}
+.login-logo {
+  text-align: center;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid var(--gold);
+}
+.login-logo h1 {
+  font-size: 2.2rem;
+  font-weight: 800;
+  background: linear-gradient(180deg, #fff3b0, #c8a14a 60%, #8a6a2a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 6px;
+}
+.login-logo span {
+  display: block;
+  font-size: 0.75rem;
+  letter-spacing: 5px;
+  color: var(--gold-dark);
+  font-weight: 600;
+}
+.login-error {
+  margin: 10px 0;
+  padding: 12px 14px;
+  background: #fdecec;
+  color: var(--red);
+  border: 1px solid #f5c6c6;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+.login-hint {
+  margin-top: 24px;
+  padding: 14px 16px;
+  background: #fffaf0;
+  border: 1px dashed var(--gold);
+  border-radius: 8px;
+  color: #8a6a2a;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  text-align: center;
+}
+.login-hint code {
+  background: rgba(200,161,74,0.15);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  color: var(--gold-dark);
+  font-weight: 700;
+}
+.login-footer {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 0.88rem;
+}
+.login-footer a {
+  color: #888;
+  transition: color 0.2s;
+}
+.login-footer a:hover { color: var(--gold-dark); }
+
+/* 관리자 헤더에 사용자 이름 + 로그아웃 */
+.admin-user {
+  color: var(--gold-light);
+  font-size: 0.9rem;
+  margin-left: 16px;
+  margin-right: 8px;
+}
+.site-header nav { display: flex; align-items: center; }
+.site-header nav .btn {
+  margin-left: 12px;
+}
+
 /* 반응형 */
 @media (max-width: 768px) {
   .hero h2 { font-size: 1.5rem; }
@@ -549,4 +642,5 @@ button { cursor: pointer; font-family: inherit; }
   .data-table th, .data-table td { padding: 8px 6px; }
   .toolbar { flex-direction: column; align-items: stretch; }
   .modal-content.modal-lg { max-width: 100%; }
+  .login-card { padding: 30px 22px; }
 }

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>하원나라 - 관리자 로그인</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="login-page">
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-logo">
+        <h1>하원나라</h1>
+        <span>ADMIN LOGIN</span>
+      </div>
+
+      <form id="login-form" autocomplete="off">
+        <div class="form-row">
+          <label>아이디</label>
+          <input type="text" id="login-username" placeholder="admin" autocomplete="username" required />
+        </div>
+        <div class="form-row">
+          <label>비밀번호</label>
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" required />
+        </div>
+        <div id="login-error" class="login-error hidden"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="login-submit">로그인</button>
+      </form>
+
+      <div class="login-hint">
+        <strong>기본 계정</strong><br>
+        ID: <code>admin</code> / PW: <code>admin123</code>
+      </div>
+
+      <div class="login-footer">
+        <a href="/">← 쇼핑몰로 돌아가기</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const form = document.getElementById('login-form');
+      const errorBox = document.getElementById('login-error');
+      const submitBtn = document.getElementById('login-submit');
+
+      // 이미 로그인되어 있으면 관리자 페이지로
+      const existingToken = localStorage.getItem('admin_token');
+      if (existingToken) {
+        fetch('/api/auth/me', {
+          headers: { Authorization: 'Bearer ' + existingToken }
+        }).then(r => {
+          if (r.ok) window.location.href = '/admin';
+        }).catch(() => {});
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorBox.classList.add('hidden');
+        submitBtn.disabled = true;
+        submitBtn.textContent = '로그인 중...';
+
+        const username = document.getElementById('login-username').value.trim();
+        const password = document.getElementById('login-password').value;
+
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+          });
+          const data = await res.json();
+          if (!data.success) throw new Error(data.error || '로그인 실패');
+
+          // 토큰 저장 (localStorage + 쿠키 동시)
+          localStorage.setItem('admin_token', data.data.token);
+          localStorage.setItem('admin_username', data.data.username);
+          // 페이지 라우트 보호용 쿠키 (8시간)
+          document.cookie = `admin_token=${encodeURIComponent(data.data.token)}; path=/; max-age=${8*60*60}; samesite=lax`;
+
+          window.location.href = '/admin';
+        } catch (err) {
+          errorBox.textContent = '❌ ' + err.message;
+          errorBox.classList.remove('hidden');
+          submitBtn.disabled = false;
+          submitBtn.textContent = '로그인';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
