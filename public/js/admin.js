@@ -386,10 +386,13 @@
   async function deleteProduct(id) {
     const product = state.products.find(p => p.id === id);
     if (!product) return;
-    if (!confirm(`"${product.name}"을(를) 삭제하시겠습니까?`)) return;
+    if (!confirm(`"${product.name}"을(를) 삭제하시겠습니까?\n\n※ 주문 이력이 있는 제품은 목록에서 숨김 처리되며 주문 기록은 보존됩니다.`)) return;
     try {
-      await api(`/api/products/${id}`, { method: 'DELETE' });
-      toast('✅ 삭제되었습니다.', 'success');
+      const res = await api(`/api/products/${id}`, { method: 'DELETE' });
+      // 서버가 { success, mode: 'hard'|'soft', message } 반환
+      const message = res?.message || '삭제되었습니다.';
+      const icon = res?.mode === 'soft' ? '📦' : '✅';
+      toast(`${icon} ${message}`, 'success');
       loadProducts();
     } catch (e) {
       toast(`❌ ${e.message}`, 'error');

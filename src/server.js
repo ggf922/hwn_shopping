@@ -103,10 +103,15 @@ app.post('/api/upload', auth.requireAdmin, (req, res) => {
 // 제품 (Products) CRUD API
 // ─────────────────────────────────────────────
 
-// 제품 목록
+// 제품 목록 (삭제되지 않은 제품만)
 app.get('/api/products', (req, res) => {
   try {
-    const rows = db.prepare('SELECT * FROM products ORDER BY created_at DESC').all();
+    // 관리자가 조회할 때는 ?include_deleted=1로 모두 조회 가능
+    const includeDeleted = req.query.include_deleted === '1';
+    const sql = includeDeleted
+      ? 'SELECT * FROM products ORDER BY created_at DESC'
+      : 'SELECT * FROM products WHERE COALESCE(is_deleted, 0) = 0 ORDER BY created_at DESC';
+    const rows = db.prepare(sql).all();
     res.json({ success: true, data: rows });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
@@ -171,12 +176,31 @@ app.put('/api/products/:id', auth.requireAdmin, (req, res) => {
 });
 
 // 제품 삭제 (관리자)
+// - 주문 이력이 없으면 하드 삭제
+// - 주문 이력이 있으면 소프트 삭제 (is_deleted = 1) — 주문 이력은 보존
 app.delete('/api/products/:id', auth.requireAdmin, (req, res) => {
   try {
-    const result = db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
-    if (result.changes === 0) return res.status(404).json({ success: false, error: '제품을 찾을 수 없습니다.' });
-    res.json({ success: true });
+    const productId = req.params.id;
+    const existing = db.prepare('SELECT * FROM products WHERE id = ?').get(productId);
+    if (!existing) return res.status(404).json({ success: false, error: '제품을 찾을 수 없습니다.' });
+
+    const orderCount = db.prepare('SELECT COUNT(*) AS c FROM orders WHERE product_id = ?').get(productId).c;
+
+    if (orderCount === 0) {
+      // 주문 이력 없음 → 완전 삭제
+      db.prepare('DELETE FROM products WHERE id = ?').run(productId);
+      return res.json({ success: true, mode: 'hard', message: '제품이 삭제되었습니다.' });
+    }
+
+    // 주문 이력 있음 → 소프트 삭제 (목록에서는 숨김, 주문 이력은 그대로 유지)
+    db.prepare('UPDATE products SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(productId);
+    res.json({
+      success: true,
+      mode: 'soft',
+      message: `주문 이력이 있어 목록에서 숨김 처리되었습니다. (관련 주문 ${orderCount}건 보존)`
+    });
   } catch (e) {
+    console.error('제품 삭제 오류:', e);
     res.status(500).json({ success: false, error: e.message });
   }
 });
@@ -319,6 +343,9 @@ app.post('/api/orders', (req, res) => {
 
     const product = db.prepare('SELECT * FROM products WHERE id = ?').get(product_id);
     if (!product) return res.status(404).json({ success: false, error: '존재하지 않는 제품입니다.' });
+    if (product.is_deleted) {
+      return res.status(400).json({ success: false, error: '판매가 중단된 제품입니다.' });
+    }
 
     const qty = Math.max(Number(quantity) || 1, 1);
     if (product.stock < qty) {

@@ -69,6 +69,8 @@ addColumnIfMissing('orders', 'recipient_address', 'TEXT');
 addColumnIfMissing('orders', 'recipient_address_detail', 'TEXT');
 addColumnIfMissing('orders', 'delivery_memo', 'TEXT');
 addColumnIfMissing('orders', 'status', "TEXT DEFAULT 'pending'");
+// products 소프트 삭제 컬럼 (주문 이력 보존을 위해 FK 충돌 시 사용)
+addColumnIfMissing('products', 'is_deleted', 'INTEGER DEFAULT 0');
 
 // 초기 샘플 데이터 (제품이 없을 때만)
 const productCount = db.prepare('SELECT COUNT(*) AS c FROM products').get().c;
