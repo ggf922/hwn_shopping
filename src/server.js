@@ -3,11 +3,39 @@
  */
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const db = require('./db');
 const { generateFullSerial, renderVoucherImage } = require('./voucher');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ─────────────────────────────────────────────
+// 업로드 디렉터리 + multer 설정
+// ─────────────────────────────────────────────
+const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+    const safeName = `product-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+    cb(null, safeName);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const allowed = /^image\/(jpeg|jpg|png|webp|gif)$/i;
+    if (!allowed.test(file.mimetype)) {
+      return cb(new Error('이미지 파일(jpg, png, webp, gif)만 업로드 가능합니다.'));
+    }
+    cb(null, true);
+  }
+});
 
 // 미들웨어
 app.use(express.json({ limit: '2mb' }));
@@ -17,6 +45,22 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
+});
+
+// ─────────────────────────────────────────────
+// 이미지 업로드 API
+// ─────────────────────────────────────────────
+app.post('/api/upload', (req, res) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: '파일이 없습니다.' });
+    }
+    const url = `/uploads/${req.file.filename}`;
+    res.json({ success: true, data: { url, filename: req.file.filename, size: req.file.size } });
+  });
 });
 
 // ─────────────────────────────────────────────
@@ -203,9 +247,28 @@ app.get('/api/vouchers/:serial/image', async (req, res) => {
 // 구매 처리
 app.post('/api/orders', (req, res) => {
   try {
-    const { voucher_serial, product_id, quantity = 1 } = req.body;
+    const {
+      voucher_serial,
+      product_id,
+      quantity = 1,
+      recipient_name,
+      recipient_phone,
+      recipient_zipcode,
+      recipient_address,
+      recipient_address_detail,
+      delivery_memo
+    } = req.body;
+
     if (!voucher_serial || !product_id) {
       return res.status(400).json({ success: false, error: '상품권 번호와 제품을 선택해주세요.' });
+    }
+
+    // 배송정보 필수 검증
+    if (!recipient_name || !recipient_phone || !recipient_address) {
+      return res.status(400).json({
+        success: false,
+        error: '받는 분 성함, 연락처, 주소는 필수 입력 항목입니다.'
+      });
     }
 
     const voucher = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(voucher_serial);
@@ -244,9 +307,21 @@ app.post('/api/orders', (req, res) => {
 
       const result = db
         .prepare(
-          'INSERT INTO orders (voucher_serial, product_id, product_name, quantity, total_price) VALUES (?, ?, ?, ?, ?)'
+          `INSERT INTO orders (
+            voucher_serial, product_id, product_name, quantity, total_price,
+            recipient_name, recipient_phone, recipient_zipcode,
+            recipient_address, recipient_address_detail, delivery_memo
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(voucher_serial, product_id, product.name, qty, totalPrice);
+        .run(
+          voucher_serial, product_id, product.name, qty, totalPrice,
+          recipient_name || '',
+          recipient_phone || '',
+          recipient_zipcode || '',
+          recipient_address || '',
+          recipient_address_detail || '',
+          delivery_memo || ''
+        );
       return result.lastInsertRowid;
     });
     const orderId = tx();
@@ -264,6 +339,23 @@ app.get('/api/orders', (req, res) => {
   try {
     const rows = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
     res.json({ success: true, data: rows });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 주문 상태 변경 (관리자)
+app.put('/api/orders/:id/status', (req, res) => {
+  try {
+    const { status } = req.body;
+    const allowed = ['pending', 'preparing', 'shipped', 'delivered', 'cancelled'];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ success: false, error: '유효하지 않은 상태입니다.' });
+    }
+    const result = db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, req.params.id);
+    if (result.changes === 0) return res.status(404).json({ success: false, error: '주문을 찾을 수 없습니다.' });
+    const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+    res.json({ success: true, data: updated });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

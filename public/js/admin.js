@@ -223,12 +223,66 @@
     $('#product-stock').value = product ? product.stock : 0;
     $('#product-image').value = product ? (product.image_url || '') : '';
     $('#product-description').value = product ? (product.description || '') : '';
+    updateImagePreview(product ? product.image_url : '');
+    $('#product-image-file').value = '';
     $('#product-modal').classList.remove('hidden');
   }
 
   function closeProductModal() {
     $('#product-modal').classList.add('hidden');
   }
+
+  // ── 이미지 미리보기 ──
+  function updateImagePreview(url) {
+    const preview = $('#image-preview');
+    const removeBtn = $('#remove-image-btn');
+    if (url && url.trim()) {
+      preview.innerHTML = `<img src="${escapeHtml(url)}" alt="미리보기" />`;
+      removeBtn.classList.remove('hidden');
+    } else {
+      preview.innerHTML = '<span class="image-placeholder">이미지를 업로드하거나 URL을 입력하세요</span>';
+      removeBtn.classList.add('hidden');
+    }
+  }
+
+  // ── 이미지 업로드 ──
+  $('#upload-image-btn').addEventListener('click', () => $('#product-image-file').click());
+
+  $('#product-image-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast('파일 크기가 5MB를 초과합니다.', 'error');
+      return;
+    }
+    const fd = new FormData();
+    fd.append('image', file);
+    const uploadBtn = $('#upload-image-btn');
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = '⏳ 업로드 중...';
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || '업로드 실패');
+      $('#product-image').value = json.data.url;
+      updateImagePreview(json.data.url);
+      toast('✅ 이미지 업로드 완료', 'success');
+    } catch (err) {
+      toast(`❌ ${err.message}`, 'error');
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = '📁 이미지 파일 업로드';
+    }
+  });
+
+  $('#remove-image-btn').addEventListener('click', () => {
+    $('#product-image').value = '';
+    $('#product-image-file').value = '';
+    updateImagePreview('');
+  });
+
+  // URL 직접 입력 시 미리보기 업데이트
+  $('#product-image').addEventListener('input', (e) => updateImagePreview(e.target.value));
 
   async function saveProduct() {
     const id = $('#product-id').value;
@@ -285,29 +339,112 @@
   // ─────────────────────────────────────────
   // 주문 내역
   // ─────────────────────────────────────────
+  const ORDER_STATUS_LABEL = {
+    pending: { label: '결제완료', class: 'pending' },
+    preparing: { label: '배송준비', class: 'preparing' },
+    shipped: { label: '배송중', class: 'shipped' },
+    delivered: { label: '배송완료', class: 'delivered' },
+    cancelled: { label: '취소', class: 'cancelled' }
+  };
+
+  function statusBadge(status) {
+    const s = ORDER_STATUS_LABEL[status] || ORDER_STATUS_LABEL.pending;
+    return `<span class="badge status-${s.class}">${s.label}</span>`;
+  }
+
   async function loadOrders() {
     const tbody = $('#order-tbody');
-    tbody.innerHTML = '<tr><td colspan="6" class="loading">불러오는 중...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="loading">불러오는 중...</td></tr>';
     try {
       state.orders = await api('/api/orders');
       if (state.orders.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty">주문 내역이 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">주문 내역이 없습니다.</td></tr>';
         return;
       }
       tbody.innerHTML = state.orders.map(o => `
-        <tr>
-          <td>#${o.id}</td>
-          <td class="serial-code">${o.voucher_serial}</td>
-          <td>${escapeHtml(o.product_name)}</td>
-          <td>${o.quantity}개</td>
-          <td>${fmt(o.total_price)}</td>
-          <td>${fmtDate(o.created_at)}</td>
+        <tr class="order-row" data-id="${o.id}" style="cursor:pointer">
+          <td>
+            <strong>#${o.id}</strong><br>
+            <span class="serial-code" style="font-size:0.75rem">${o.voucher_serial}</span>
+          </td>
+          <td>
+            ${escapeHtml(o.product_name)} × ${o.quantity}<br>
+            <span style="color:var(--gold-dark);font-weight:600">${fmt(o.total_price)}</span>
+          </td>
+          <td>${escapeHtml(o.recipient_name || '-')}</td>
+          <td>${escapeHtml(o.recipient_phone || '-')}</td>
+          <td style="max-width:260px">
+            ${o.recipient_zipcode ? `<small style="color:#888">[${escapeHtml(o.recipient_zipcode)}]</small> ` : ''}
+            ${escapeHtml(o.recipient_address || '-')}
+            ${o.recipient_address_detail ? `<br><small style="color:#666">${escapeHtml(o.recipient_address_detail)}</small>` : ''}
+          </td>
+          <td style="max-width:160px;color:#666;font-size:0.85rem">${escapeHtml(o.delivery_memo || '-')}</td>
+          <td>${statusBadge(o.status || 'pending')}</td>
+          <td style="font-size:0.85rem">${fmtDate(o.created_at)}</td>
         </tr>
       `).join('');
+      $$('.order-row').forEach(row => {
+        row.addEventListener('click', () => openOrderDetail(Number(row.dataset.id)));
+      });
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">${e.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="empty">${e.message}</td></tr>`;
     }
   }
+
+  function openOrderDetail(orderId) {
+    const o = state.orders.find(x => x.id === orderId);
+    if (!o) return;
+    const statuses = ['pending', 'preparing', 'shipped', 'delivered', 'cancelled'];
+    const currentStatus = o.status || 'pending';
+    $('#order-detail-body').innerHTML = `
+      <div class="detail-section">
+        <h4>주문 정보</h4>
+        <div class="detail-row"><span>주문번호</span><strong>#${o.id}</strong></div>
+        <div class="detail-row"><span>상품권</span><span class="serial-code">${o.voucher_serial}</span></div>
+        <div class="detail-row"><span>제품</span><strong>${escapeHtml(o.product_name)} × ${o.quantity}</strong></div>
+        <div class="detail-row"><span>결제금액</span><strong style="color:var(--gold-dark)">${fmt(o.total_price)}</strong></div>
+        <div class="detail-row"><span>주문일시</span>${fmtDate(o.created_at)}</div>
+      </div>
+      <div class="detail-section">
+        <h4>📦 배송 정보</h4>
+        <div class="detail-row"><span>받는 분</span><strong>${escapeHtml(o.recipient_name || '-')}</strong></div>
+        <div class="detail-row"><span>연락처</span>${escapeHtml(o.recipient_phone || '-')}</div>
+        <div class="detail-row"><span>우편번호</span>${escapeHtml(o.recipient_zipcode || '-')}</div>
+        <div class="detail-row"><span>주소</span>${escapeHtml(o.recipient_address || '-')}</div>
+        <div class="detail-row"><span>상세주소</span>${escapeHtml(o.recipient_address_detail || '-')}</div>
+        <div class="detail-row"><span>배송메모</span>${escapeHtml(o.delivery_memo || '-')}</div>
+      </div>
+      <div class="detail-section">
+        <h4>주문 상태 변경</h4>
+        <select id="order-status-select">
+          ${statuses.map(s => `<option value="${s}" ${s===currentStatus?'selected':''}>${ORDER_STATUS_LABEL[s].label}</option>`).join('')}
+        </select>
+        <button class="btn btn-primary btn-sm" id="save-order-status" style="margin-left:8px" data-id="${o.id}">상태 저장</button>
+      </div>
+    `;
+    $('#save-order-status').addEventListener('click', async (e) => {
+      const id = e.target.dataset.id;
+      const status = $('#order-status-select').value;
+      try {
+        await api(`/api/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+        toast('✅ 주문 상태가 변경되었습니다.', 'success');
+        closeOrderDetail();
+        loadOrders();
+      } catch (err) {
+        toast(`❌ ${err.message}`, 'error');
+      }
+    });
+    $('#order-detail-modal').classList.remove('hidden');
+  }
+
+  function closeOrderDetail() {
+    $('#order-detail-modal').classList.add('hidden');
+  }
+
+  $('#order-detail-close').addEventListener('click', closeOrderDetail);
+  $('#order-detail-modal').addEventListener('click', (e) => {
+    if (e.target === $('#order-detail-modal')) closeOrderDetail();
+  });
 
   $('#refresh-orders').addEventListener('click', loadOrders);
 })();

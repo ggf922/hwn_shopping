@@ -41,11 +41,34 @@ db.exec(`
     product_name TEXT NOT NULL,
     quantity INTEGER NOT NULL,
     total_price INTEGER NOT NULL,
+    recipient_name TEXT,
+    recipient_phone TEXT,
+    recipient_zipcode TEXT,
+    recipient_address TEXT,
+    recipient_address_detail TEXT,
+    delivery_memo TEXT,
+    status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (voucher_serial) REFERENCES vouchers(serial),
     FOREIGN KEY (product_id) REFERENCES products(id)
   );
 `);
+
+// 마이그레이션: 기존 orders 테이블에 배송정보 컬럼이 없으면 추가
+function addColumnIfMissing(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.find(c => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    console.log(`[DB] 마이그레이션: ${table}.${column} 추가`);
+  }
+}
+addColumnIfMissing('orders', 'recipient_name', 'TEXT');
+addColumnIfMissing('orders', 'recipient_phone', 'TEXT');
+addColumnIfMissing('orders', 'recipient_zipcode', 'TEXT');
+addColumnIfMissing('orders', 'recipient_address', 'TEXT');
+addColumnIfMissing('orders', 'recipient_address_detail', 'TEXT');
+addColumnIfMissing('orders', 'delivery_memo', 'TEXT');
+addColumnIfMissing('orders', 'status', "TEXT DEFAULT 'pending'");
 
 // 초기 샘플 데이터 (제품이 없을 때만)
 const productCount = db.prepare('SELECT COUNT(*) AS c FROM products').get().c;

@@ -51,14 +51,42 @@
 
   <!-- 구매 모달 -->
   <div id="purchase-modal" class="modal hidden">
-    <div class="modal-content">
+    <div class="modal-content modal-lg">
       <button class="modal-close" id="modal-close">&times;</button>
       <h3>제품 구매</h3>
       <div id="modal-product-info"></div>
+
       <div class="form-row">
         <label>수량</label>
         <input type="number" id="purchase-quantity" value="1" min="1" />
       </div>
+
+      <h4 class="section-title">📦 배송 정보</h4>
+      <div class="form-row">
+        <label>받는 분 성함 *</label>
+        <input type="text" id="recipient-name" placeholder="홍길동" />
+      </div>
+      <div class="form-row">
+        <label>연락처 *</label>
+        <input type="tel" id="recipient-phone" placeholder="010-1234-5678" />
+      </div>
+      <div class="form-row">
+        <label>우편번호</label>
+        <input type="text" id="recipient-zipcode" placeholder="12345" />
+      </div>
+      <div class="form-row">
+        <label>주소 *</label>
+        <input type="text" id="recipient-address" placeholder="서울특별시 종로구 종로 1" />
+      </div>
+      <div class="form-row">
+        <label>상세 주소</label>
+        <input type="text" id="recipient-address-detail" placeholder="101동 1004호" />
+      </div>
+      <div class="form-row">
+        <label>배송 메모</label>
+        <textarea id="delivery-memo" placeholder="부재 시 경비실에 맡겨 주세요."></textarea>
+      </div>
+
       <div class="total-line">
         <span>결제 금액</span>
         <strong id="purchase-total">0원</strong>

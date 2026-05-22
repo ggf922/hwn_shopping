@@ -167,6 +167,22 @@
   async function confirmPurchase() {
     if (!state.voucher || !state.selectedProduct) return;
     const qty = Math.max(1, Number(purchaseQuantity.value) || 1);
+
+    // 배송정보 수집
+    const shipping = {
+      recipient_name: $('#recipient-name').value.trim(),
+      recipient_phone: $('#recipient-phone').value.trim(),
+      recipient_zipcode: $('#recipient-zipcode').value.trim(),
+      recipient_address: $('#recipient-address').value.trim(),
+      recipient_address_detail: $('#recipient-address-detail').value.trim(),
+      delivery_memo: $('#delivery-memo').value.trim()
+    };
+
+    // 필수 검증
+    if (!shipping.recipient_name) return toast('받는 분 성함을 입력해주세요.', 'error');
+    if (!shipping.recipient_phone) return toast('연락처를 입력해주세요.', 'error');
+    if (!shipping.recipient_address) return toast('주소를 입력해주세요.', 'error');
+
     try {
       confirmPurchaseBtn.disabled = true;
       const result = await api('/api/orders', {
@@ -174,11 +190,12 @@
         body: JSON.stringify({
           voucher_serial: state.voucher.serial,
           product_id: state.selectedProduct.id,
-          quantity: qty
+          quantity: qty,
+          ...shipping
         })
       });
       state.voucher = result.voucher;
-      toast(`🎉 구매가 완료되었습니다. (잔액: ${fmt(result.voucher.balance)})`, 'success');
+      toast(`🎉 구매 완료! 주문번호 #${result.order.id} (잔액: ${fmt(result.voucher.balance)})`, 'success');
       showVoucherStatus(
         `✅ 사용 가능한 상품권입니다. (액면 ${fmt(result.voucher.amount)} / 잔액 ${fmt(result.voucher.balance)})`,
         'success'
