@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>하원나라 - 프리미엄 쇼핑몰</title>
-  <link rel="stylesheet" href="/css/style.css?v=7" />
+  <link rel="stylesheet" href="/css/style.css?v=9" />
+  <!-- 다음(카카오) 우편번호 검색 API -->
+  <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
 <body>
   <header class="site-header">
@@ -84,11 +86,16 @@
       </div>
       <div class="form-row">
         <label>우편번호</label>
-        <input type="text" id="recipient-zipcode" placeholder="12345" />
+        <div class="zipcode-row">
+          <input type="text" id="recipient-zipcode" placeholder="12345" readonly />
+          <button type="button" id="search-address-btn" class="btn btn-secondary">
+            🔍 주소 검색
+          </button>
+        </div>
       </div>
       <div class="form-row">
         <label>주소 *</label>
-        <input type="text" id="recipient-address" placeholder="서울특별시 종로구 종로 1" />
+        <input type="text" id="recipient-address" placeholder="주소 검색 버튼을 눌러 주세요." readonly />
       </div>
       <div class="form-row">
         <label>상세 주소</label>
@@ -111,12 +118,23 @@
     </div>
   </div>
 
+  <!-- 다음 우편번호 검색 레이어 (모달 위에 표시) -->
+  <div id="postcode-layer" class="postcode-layer hidden" aria-hidden="true">
+    <div class="postcode-layer-inner">
+      <div class="postcode-layer-header">
+        <span>📮 주소 검색</span>
+        <button type="button" id="postcode-close-btn" class="postcode-close" aria-label="닫기">✕</button>
+      </div>
+      <div id="postcode-embed" class="postcode-embed"></div>
+    </div>
+  </div>
+
   <footer class="site-footer">
     <div class="container">
       <p>© 2026 하원나라 (HAWONNARA). All rights reserved.</p>
     </div>
   </footer>
 
-  <script src="/js/shop.js?v=7"></script>
+  <script src="/js/shop.js?v=9"></script>
 </body>
 </html>

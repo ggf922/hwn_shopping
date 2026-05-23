@@ -294,6 +294,93 @@ button { cursor: pointer; font-family: inherit; }
   outline: none;
   border-color: var(--gold);
 }
+/* 읽기 전용 필드 (주소 검색으로만 채워지는 우편번호/주소) */
+.form-row input[readonly] {
+  background: #f7f5f0;
+  color: #444;
+  cursor: pointer;
+}
+.form-row input[readonly]:focus { border-color: var(--gold-dark); }
+
+/* 우편번호 행: 입력란 + 검색 버튼 가로 배치 */
+.zipcode-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.zipcode-row input {
+  flex: 1;
+  min-width: 0;
+}
+.zipcode-row .btn {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  white-space: nowrap;
+  background: var(--gold);
+  color: #1a1a1a;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.zipcode-row .btn:hover { background: var(--gold-dark); color: #fff; }
+
+/* ── 주소 검색 레이어 (다음 우편번호 embed) ── */
+.postcode-layer {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;          /* 구매 모달(1000)보다 위 */
+  padding: 20px;
+}
+.postcode-layer.hidden { display: none; }
+.postcode-layer-inner {
+  width: 100%;
+  max-width: 500px;
+  height: 600px;
+  max-height: 90vh;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  border: 2px solid var(--gold);
+}
+.postcode-layer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: #1a1a1a;
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 1rem;
+}
+.postcode-close {
+  background: transparent;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.postcode-close:hover { background: var(--gold); color: #1a1a1a; }
+.postcode-embed {
+  flex: 1;
+  min-height: 0;
+  background: #fafafa;
+}
 .total-line {
   display: flex;
   justify-content: space-between;

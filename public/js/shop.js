@@ -181,7 +181,7 @@
     // 필수 검증
     if (!shipping.recipient_name) return toast('받는 분 성함을 입력해주세요.', 'error');
     if (!shipping.recipient_phone) return toast('연락처를 입력해주세요.', 'error');
-    if (!shipping.recipient_address) return toast('주소를 입력해주세요.', 'error');
+    if (!shipping.recipient_address) return toast('🔍 주소 검색 버튼을 눌러 주소를 선택해주세요.', 'error');
 
     try {
       confirmPurchaseBtn.disabled = true;
@@ -220,6 +220,79 @@
   });
   purchaseQuantity.addEventListener('input', updatePurchaseTotal);
   confirmPurchaseBtn.addEventListener('click', confirmPurchase);
+
+  // ── 주소 검색 (다음 카카오 우편번호 API, 페이지 embed 방식) ──
+  const postcodeLayer = $('#postcode-layer');
+  const postcodeEmbed = $('#postcode-embed');
+  const postcodeCloseBtn = $('#postcode-close-btn');
+
+  function closeAddressSearch() {
+    if (!postcodeLayer) return;
+    postcodeLayer.classList.add('hidden');
+    postcodeLayer.setAttribute('aria-hidden', 'true');
+    if (postcodeEmbed) postcodeEmbed.innerHTML = '';
+  }
+
+  function openAddressSearch() {
+    if (typeof daum === 'undefined' || !daum.Postcode) {
+      toast('주소 검색 스크립트를 불러오는 중입니다. 잠시 후 다시 시도해주세요.', 'error');
+      return;
+    }
+    if (!postcodeLayer || !postcodeEmbed) return;
+
+    // 레이어 표시
+    postcodeLayer.classList.remove('hidden');
+    postcodeLayer.setAttribute('aria-hidden', 'false');
+    postcodeEmbed.innerHTML = '';
+
+    new daum.Postcode({
+      oncomplete: function (data) {
+        // 도로명 주소가 있으면 우선 사용, 없으면 지번 주소
+        let fullAddress = data.roadAddress || data.jibunAddress;
+        // 참고 항목(법정동/건물명)이 있으면 괄호로 추가
+        let extra = '';
+        if (data.userSelectedType === 'R') {
+          if (data.bname && /[동|로|가]$/g.test(data.bname)) extra += data.bname;
+          if (data.buildingName && data.apartment === 'Y') {
+            extra += (extra ? ', ' : '') + data.buildingName;
+          }
+          if (extra) fullAddress += ` (${extra})`;
+        }
+        $('#recipient-zipcode').value = data.zonecode || '';
+        $('#recipient-address').value = fullAddress;
+        // 레이어 닫고 상세 주소 입력칸으로 포커스
+        closeAddressSearch();
+        const detailInput = $('#recipient-address-detail');
+        if (detailInput) detailInput.focus();
+      },
+      onclose: function () {
+        // 사용자가 검색을 닫았을 때 레이어도 함께 닫음
+        closeAddressSearch();
+      },
+      width: '100%',
+      height: '100%',
+      theme: {
+        bgColor: '#1a1a1a',
+        searchBgColor: '#c8a14a',
+        contentBgColor: '#ffffff',
+        pageBgColor: '#fafafa',
+        textColor: '#333333',
+        queryTextColor: '#ffffff',
+        postcodeTextColor: '#c8a14a',
+        emphTextColor: '#c8a14a',
+        outlineColor: '#c8a14a'
+      }
+    }).embed(postcodeEmbed);
+  }
+
+  const searchAddrBtn = $('#search-address-btn');
+  if (searchAddrBtn) searchAddrBtn.addEventListener('click', openAddressSearch);
+  if (postcodeCloseBtn) postcodeCloseBtn.addEventListener('click', closeAddressSearch);
+  if (postcodeLayer) {
+    postcodeLayer.addEventListener('click', (e) => {
+      if (e.target === postcodeLayer) closeAddressSearch();
+    });
+  }
 
   // ── 초기화 ──
   loadProducts();
