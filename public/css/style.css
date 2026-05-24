@@ -461,6 +461,42 @@ button { cursor: pointer; font-family: inherit; }
 
 .action-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
 
+/* 제품 순서 변경 컨트롤 (관리자 제품 관리) */
+.order-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.order-controls .order-btn {
+  width: 32px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--gold, #c9a14a);
+  background: #fff;
+  color: var(--gold-dark, #8a6a1f);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.order-controls .order-btn:hover:not(:disabled) {
+  background: var(--gold, #c9a14a);
+  color: #fff;
+}
+.order-controls .order-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.order-controls .order-index {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #666;
+  min-width: 24px;
+  text-align: center;
+}
+
 .badge {
   display: inline-block;
   padding: 3px 10px;

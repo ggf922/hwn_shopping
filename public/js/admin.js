@@ -247,11 +247,19 @@
     try {
       state.products = await api('/api/products');
       if (state.products.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty">등록된 제품이 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">등록된 제품이 없습니다.</td></tr>';
         return;
       }
-      tbody.innerHTML = state.products.map(p => `
-        <tr>
+      const total = state.products.length;
+      tbody.innerHTML = state.products.map((p, idx) => `
+        <tr data-product-id="${p.id}">
+          <td>
+            <div class="order-controls">
+              <button class="order-btn move-up" data-id="${p.id}" ${idx === 0 ? 'disabled' : ''} title="위로 이동" aria-label="위로 이동">▲</button>
+              <span class="order-index">${idx + 1}</span>
+              <button class="order-btn move-down" data-id="${p.id}" ${idx === total - 1 ? 'disabled' : ''} title="아래로 이동" aria-label="아래로 이동">▼</button>
+            </div>
+          </td>
           <td><div class="product-thumb" style="background-image:url('${escapeHtml(p.image_url || '')}')"></div></td>
           <td><strong>${escapeHtml(p.name)}</strong></td>
           <td>${fmt(p.price)}</td>
@@ -267,8 +275,29 @@
       `).join('');
       $$('.edit-product').forEach(b => b.addEventListener('click', () => openProductModal(Number(b.dataset.id))));
       $$('.delete-product').forEach(b => b.addEventListener('click', () => deleteProduct(Number(b.dataset.id))));
+      $$('.move-up').forEach(b => b.addEventListener('click', () => moveProduct(Number(b.dataset.id), 'up')));
+      $$('.move-down').forEach(b => b.addEventListener('click', () => moveProduct(Number(b.dataset.id), 'down')));
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">${e.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${e.message}</td></tr>`;
+    }
+  }
+
+  async function moveProduct(id, direction) {
+    // 연속 클릭 방지 — 버튼 일시 비활성화
+    $$('.move-up, .move-down').forEach(b => (b.disabled = true));
+    try {
+      const result = await api(`/api/products/${id}/move`, {
+        method: 'POST',
+        body: JSON.stringify({ direction })
+      });
+      if (result && result.moved === false) {
+        toast(result.message || '이동할 수 없습니다.', 'info');
+      }
+      await loadProducts();
+    } catch (e) {
+      toast('순서 변경 실패: ' + e.message, 'error');
+      // 실패 시 버튼 재활성화
+      await loadProducts();
     }
   }
 

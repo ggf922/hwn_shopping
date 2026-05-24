@@ -109,8 +109,8 @@ app.get('/api/products', (req, res) => {
     // 관리자가 조회할 때는 ?include_deleted=1로 모두 조회 가능
     const includeDeleted = req.query.include_deleted === '1';
     const sql = includeDeleted
-      ? 'SELECT * FROM products ORDER BY created_at DESC'
-      : 'SELECT * FROM products WHERE COALESCE(is_deleted, 0) = 0 ORDER BY created_at DESC';
+      ? 'SELECT * FROM products ORDER BY sort_order ASC, id ASC'
+      : 'SELECT * FROM products WHERE COALESCE(is_deleted, 0) = 0 ORDER BY sort_order ASC, id ASC';
     const rows = db.prepare(sql).all();
     res.json({ success: true, data: rows });
   } catch (e) {
@@ -136,11 +136,14 @@ app.post('/api/products', auth.requireAdmin, (req, res) => {
     if (!name || price == null) {
       return res.status(400).json({ success: false, error: '이름과 가격은 필수입니다.' });
     }
+    // 신규 제품은 sort_order 최대값 + 1 (목록 맨 뒤에 추가)
+    const maxRow = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM products').get();
+    const nextOrder = (maxRow && maxRow.m ? maxRow.m : 0) + 1;
     const result = db
       .prepare(
-        'INSERT INTO products (name, price, description, image_url, stock) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO products (name, price, description, image_url, stock, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
       )
-      .run(name, Number(price), description || '', image_url || '', Number(stock) || 0);
+      .run(name, Number(price), description || '', image_url || '', Number(stock) || 0, nextOrder);
     const created = db.prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ success: true, data: created });
   } catch (e) {
@@ -171,6 +174,69 @@ app.put('/api/products/:id', auth.requireAdmin, (req, res) => {
     const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
     res.json({ success: true, data: updated });
   } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 제품 순서 변경 (관리자) - 단건 이동 (위/아래 한 칸)
+// body: { direction: 'up' | 'down' }
+app.post('/api/products/:id/move', auth.requireAdmin, (req, res) => {
+  try {
+    const productId = Number(req.params.id);
+    const direction = req.body && req.body.direction;
+    if (direction !== 'up' && direction !== 'down') {
+      return res.status(400).json({ success: false, error: "direction은 'up' 또는 'down'이어야 합니다." });
+    }
+
+    const current = db.prepare('SELECT id, sort_order FROM products WHERE id = ? AND COALESCE(is_deleted, 0) = 0').get(productId);
+    if (!current) return res.status(404).json({ success: false, error: '제품을 찾을 수 없습니다.' });
+
+    // 인접한 (위/아래) 활성 제품 찾기 — 정렬 순서 기준
+    const neighborSql = direction === 'up'
+      ? `SELECT id, sort_order FROM products
+         WHERE COALESCE(is_deleted, 0) = 0
+           AND (sort_order < ? OR (sort_order = ? AND id < ?))
+         ORDER BY sort_order DESC, id DESC LIMIT 1`
+      : `SELECT id, sort_order FROM products
+         WHERE COALESCE(is_deleted, 0) = 0
+           AND (sort_order > ? OR (sort_order = ? AND id > ?))
+         ORDER BY sort_order ASC, id ASC LIMIT 1`;
+    const neighbor = db.prepare(neighborSql).get(current.sort_order, current.sort_order, current.id);
+    if (!neighbor) {
+      return res.json({ success: true, moved: false, message: direction === 'up' ? '이미 최상단입니다.' : '이미 최하단입니다.' });
+    }
+
+    // 두 행의 sort_order 교환 (UNIQUE 제약이 없으므로 안전하게 스왑)
+    const upd = db.prepare('UPDATE products SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+    const tx = db.transaction(() => {
+      upd.run(neighbor.sort_order, current.id);
+      upd.run(current.sort_order, neighbor.id);
+    });
+    tx();
+
+    res.json({ success: true, moved: true, direction });
+  } catch (e) {
+    console.error('제품 순서 변경 오류:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 제품 순서 일괄 변경 (관리자) - 전체 ID 배열을 받아 sort_order 재할당
+// body: { ids: [id1, id2, ...] }  ← 화면에 보이는 순서대로
+app.put('/api/products/reorder', auth.requireAdmin, (req, res) => {
+  try {
+    const ids = (req.body && req.body.ids) || [];
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'ids 배열이 필요합니다.' });
+    }
+    const upd = db.prepare('UPDATE products SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+    const tx = db.transaction(() => {
+      ids.forEach((id, idx) => upd.run(idx + 1, Number(id)));
+    });
+    tx();
+    res.json({ success: true, count: ids.length });
+  } catch (e) {
+    console.error('제품 일괄 순서 변경 오류:', e);
     res.status(500).json({ success: false, error: e.message });
   }
 });

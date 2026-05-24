@@ -71,6 +71,25 @@ addColumnIfMissing('orders', 'delivery_memo', 'TEXT');
 addColumnIfMissing('orders', 'status', "TEXT DEFAULT 'pending'");
 // products 소프트 삭제 컬럼 (주문 이력 보존을 위해 FK 충돌 시 사용)
 addColumnIfMissing('products', 'is_deleted', 'INTEGER DEFAULT 0');
+// products 정렬 순서 컬럼 (관리자 페이지에서 수동 순서 변경 지원)
+addColumnIfMissing('products', 'sort_order', 'INTEGER');
+// 기존 제품 중 sort_order가 NULL인 경우 id를 기반으로 초기값 부여
+(() => {
+  const nullRows = db.prepare('SELECT id FROM products WHERE sort_order IS NULL ORDER BY id ASC').all();
+  if (nullRows.length > 0) {
+    const baseRow = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM products WHERE sort_order IS NOT NULL').get();
+    let next = (baseRow && baseRow.m ? baseRow.m : 0) + 1;
+    const upd = db.prepare('UPDATE products SET sort_order = ? WHERE id = ?');
+    const tx = db.transaction(() => {
+      for (const r of nullRows) {
+        upd.run(next, r.id);
+        next++;
+      }
+    });
+    tx();
+    console.log(`[DB] 마이그레이션: products.sort_order 초기값 ${nullRows.length}건 적용`);
+  }
+})();
 
 // 초기 샘플 데이터 (제품이 없을 때만)
 const productCount = db.prepare('SELECT COUNT(*) AS c FROM products').get().c;
