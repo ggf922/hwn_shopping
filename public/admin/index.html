@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>하원나라 - 관리자</title>
-  <link rel="stylesheet" href="/css/style.css?v=11" />
+  <link rel="stylesheet" href="/css/style.css?v=12" />
 </head>
 <body>
   <header class="site-header">
@@ -53,9 +53,27 @@
       <div class="toolbar">
         <h3>📋 발권된 상품권 목록</h3>
         <div class="toolbar-actions">
-          <button class="btn btn-secondary btn-sm" id="copy-vouchers" title="엑셀/구글 시트에 붙여넣기 가능한 형식으로 복사">📋 복사하기</button>
+          <button class="btn btn-secondary btn-sm" id="copy-vouchers" title="선택한 기간의 데이터를 엑셀/구글 시트용 형식으로 복사">📋 복사하기</button>
           <button class="btn btn-secondary btn-sm" id="refresh-vouchers">새로고침</button>
         </div>
+      </div>
+      <!-- 기간 선택 (복사하기에만 적용) -->
+      <div class="date-filter" data-target="vouchers">
+        <span class="date-filter-label">📅 복사 기간:</span>
+        <div class="date-filter-quick">
+          <button type="button" class="quick-btn" data-range="today">오늘</button>
+          <button type="button" class="quick-btn" data-range="yesterday">어제</button>
+          <button type="button" class="quick-btn" data-range="last7">최근 7일</button>
+          <button type="button" class="quick-btn" data-range="last30">최근 30일</button>
+          <button type="button" class="quick-btn" data-range="thismonth">이번 달</button>
+          <button type="button" class="quick-btn active" data-range="all">전체</button>
+        </div>
+        <div class="date-filter-range">
+          <input type="date" id="vouchers-date-from" class="date-input" />
+          <span class="date-sep">~</span>
+          <input type="date" id="vouchers-date-to" class="date-input" />
+        </div>
+        <span class="date-filter-count" id="vouchers-count-preview"></span>
       </div>
       <table class="data-table">
         <thead>
@@ -103,9 +121,27 @@
       <div class="toolbar">
         <h3>🧾 주문 내역</h3>
         <div class="toolbar-actions">
-          <button class="btn btn-secondary btn-sm" id="copy-orders" title="엑셀/구글 시트에 붙여넣기 가능한 형식으로 복사">📋 복사하기</button>
+          <button class="btn btn-secondary btn-sm" id="copy-orders" title="선택한 기간의 데이터를 엑셀/구글 시트용 형식으로 복사">📋 복사하기</button>
           <button class="btn btn-secondary btn-sm" id="refresh-orders">새로고침</button>
         </div>
+      </div>
+      <!-- 기간 선택 (복사하기에만 적용) -->
+      <div class="date-filter" data-target="orders">
+        <span class="date-filter-label">📅 복사 기간:</span>
+        <div class="date-filter-quick">
+          <button type="button" class="quick-btn" data-range="today">오늘</button>
+          <button type="button" class="quick-btn" data-range="yesterday">어제</button>
+          <button type="button" class="quick-btn" data-range="last7">최근 7일</button>
+          <button type="button" class="quick-btn" data-range="last30">최근 30일</button>
+          <button type="button" class="quick-btn" data-range="thismonth">이번 달</button>
+          <button type="button" class="quick-btn active" data-range="all">전체</button>
+        </div>
+        <div class="date-filter-range">
+          <input type="date" id="orders-date-from" class="date-input" />
+          <span class="date-sep">~</span>
+          <input type="date" id="orders-date-to" class="date-input" />
+        </div>
+        <span class="date-filter-count" id="orders-count-preview"></span>
       </div>
       <table class="data-table">
         <thead>
@@ -183,6 +219,6 @@
     </div>
   </div>
 
-  <script src="/js/admin.js?v=8"></script>
+  <script src="/js/admin.js?v=9"></script>
 </body>
 </html>

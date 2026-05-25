@@ -82,6 +82,108 @@
     }
   }
 
+  // ── 날짜 필터 헬퍼 (한국 로컬 날짜 기준) ──
+  // DB의 datetime 문자열(예: "2026-05-25 03:03:53")을 Date 로 파싱 → 한국 로컬 YYYY-MM-DD 추출
+  function localDateKey(dbDateStr) {
+    if (!dbDateStr) return '';
+    const d = new Date(dbDateStr.includes('T') ? dbDateStr : dbDateStr.replace(' ', 'T') + 'Z');
+    if (isNaN(d.getTime())) return '';
+    // 한국 시간대로 YYYY-MM-DD 추출 (사용자가 선택한 날짜 입력값과 동일 형식)
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  function todayKey() {
+    return localDateKey(new Date().toISOString());
+  }
+  function shiftDayKey(key, deltaDays) {
+    const [y, m, d] = key.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + deltaDays);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+  function monthStartKey(key) {
+    const [y, m] = key.split('-');
+    return `${y}-${m}-01`;
+  }
+  // 빠른 선택 → {from, to} 날짜 키 반환 (둘 다 '' 이면 '전체')
+  function computeRange(range) {
+    const t = todayKey();
+    switch (range) {
+      case 'today':     return { from: t, to: t };
+      case 'yesterday': { const y = shiftDayKey(t, -1); return { from: y, to: y }; }
+      case 'last7':     return { from: shiftDayKey(t, -6), to: t };
+      case 'last30':    return { from: shiftDayKey(t, -29), to: t };
+      case 'thismonth': return { from: monthStartKey(t), to: t };
+      case 'all':
+      default:          return { from: '', to: '' };
+    }
+  }
+  // 행 배열에서 dateField 기준으로 [from, to] 범위 필터링
+  function filterByDateRange(rows, dateField, from, to) {
+    if (!from && !to) return rows.slice();
+    return rows.filter(r => {
+      const k = localDateKey(r[dateField]);
+      if (!k) return false;
+      if (from && k < from) return false;
+      if (to && k > to) return false;
+      return true;
+    });
+  }
+
+  // 날짜 필터 컨테이너에 빠른 버튼/입력값 동기화 핸들러 부착
+  function bindDateFilter(target, dateField, getRows, onChange) {
+    const container = document.querySelector(`.date-filter[data-target="${target}"]`);
+    if (!container) return null;
+    const fromInput = container.querySelector('.date-filter-range input.date-input:first-of-type')
+                   || container.querySelector(`#${target}-date-from`);
+    const toInput = container.querySelector(`#${target}-date-to`);
+    const quickBtns = container.querySelectorAll('.quick-btn');
+    const countEl = container.querySelector('.date-filter-count');
+
+    function setActiveButton(range) {
+      quickBtns.forEach(b => b.classList.toggle('active', b.dataset.range === range));
+    }
+    function updatePreview() {
+      if (!countEl) return;
+      const rows = (getRows() || []);
+      const filtered = filterByDateRange(rows, dateField, fromInput.value || '', toInput.value || '');
+      countEl.textContent = `현재 선택: ${filtered.length}건 / 전체 ${rows.length}건`;
+    }
+    function applyRange(range) {
+      const { from, to } = computeRange(range);
+      fromInput.value = from;
+      toInput.value = to;
+      setActiveButton(range);
+      updatePreview();
+    }
+    function clearActiveButtonsIfManual() {
+      // 사용자가 직접 input을 바꾸면 빠른 버튼 선택을 해제 (active 표시 제거)
+      quickBtns.forEach(b => b.classList.remove('active'));
+      updatePreview();
+    }
+
+    quickBtns.forEach(btn => {
+      btn.addEventListener('click', () => applyRange(btn.dataset.range));
+    });
+    if (fromInput) fromInput.addEventListener('change', clearActiveButtonsIfManual);
+    if (toInput) toInput.addEventListener('change', clearActiveButtonsIfManual);
+
+    // 초기 상태: 전체
+    applyRange('all');
+
+    return {
+      // 현재 선택된 range 반환
+      getRange: () => ({ from: fromInput.value || '', to: toInput.value || '' }),
+      // 외부에서 데이터 변경 후 호출 (목록 새로 로드 등)
+      refreshPreview: updatePreview
+    };
+  }
+
   function getToken() {
     return localStorage.getItem('admin_token') || '';
   }
@@ -287,14 +389,32 @@
 
   $('#refresh-vouchers').addEventListener('click', loadVouchers);
 
+  // ── 날짜 필터 바인딩 (상품권 — 발권일 기준) ──
+  const vouchersFilter = bindDateFilter('vouchers', 'issued_at', () => state.vouchers || []);
+  // 목록 로드 후 카운트 미리보기 갱신을 위해 loadVouchers 종료 후 호출되도록 래핑
+  const _origLoadVouchers = loadVouchers;
+  loadVouchers = async function () {
+    await _origLoadVouchers.apply(this, arguments);
+    if (vouchersFilter) vouchersFilter.refreshPreview();
+  };
+
   // ── 상품권 목록 복사 (엑셀/구글 시트용 TSV) ──
   async function copyVouchersToClipboard() {
     if (!state.vouchers || state.vouchers.length === 0) {
       toast('복사할 상품권이 없습니다. (목록을 먼저 불러와 주세요)', 'error');
       return;
     }
+    const range = vouchersFilter ? vouchersFilter.getRange() : { from: '', to: '' };
+    const filtered = filterByDateRange(state.vouchers, 'issued_at', range.from, range.to);
+    if (filtered.length === 0) {
+      const rangeLabel = (range.from || range.to)
+        ? `${range.from || '처음'} ~ ${range.to || '끝'}`
+        : '전체';
+      toast(`선택한 기간(${rangeLabel})에 해당하는 상품권이 없습니다.`, 'error');
+      return;
+    }
     const headers = ['일련번호', '액면가', '잔액', '상태', '발권일', '사용일'];
-    const rows = state.vouchers.map(v => [
+    const rows = filtered.map(v => [
       v.serial,
       Number(v.amount),
       Number(v.balance),
@@ -305,7 +425,10 @@
     const tsv = buildTsv(headers, rows);
     const ok = await copyToClipboard(tsv);
     if (ok) {
-      toast(`✅ 상품권 ${state.vouchers.length}건이 클립보드에 복사되었습니다. (엑셀/구글 시트에 붙여넣기 가능)`, 'success');
+      const rangeLabel = (range.from || range.to)
+        ? `${range.from || '처음'} ~ ${range.to || '끝'}`
+        : '전체';
+      toast(`✅ 상품권 ${filtered.length}건 복사 완료 (기간: ${rangeLabel})`, 'success');
     } else {
       toast('❌ 복사에 실패했습니다. 브라우저 권한을 확인해주세요.', 'error');
     }
@@ -621,10 +744,28 @@
 
   $('#refresh-orders').addEventListener('click', loadOrders);
 
+  // ── 날짜 필터 바인딩 (주문 — 주문일시 기준) ──
+  const ordersFilter = bindDateFilter('orders', 'created_at', () => state.orders || []);
+  // 목록 로드 후 카운트 미리보기 갱신
+  const _origLoadOrders = loadOrders;
+  loadOrders = async function () {
+    await _origLoadOrders.apply(this, arguments);
+    if (ordersFilter) ordersFilter.refreshPreview();
+  };
+
   // ── 주문 내역 복사 (엑셀/구글 시트용 TSV) ──
   async function copyOrdersToClipboard() {
     if (!state.orders || state.orders.length === 0) {
       toast('복사할 주문이 없습니다. (목록을 먼저 불러와 주세요)', 'error');
+      return;
+    }
+    const range = ordersFilter ? ordersFilter.getRange() : { from: '', to: '' };
+    const filtered = filterByDateRange(state.orders, 'created_at', range.from, range.to);
+    if (filtered.length === 0) {
+      const rangeLabel = (range.from || range.to)
+        ? `${range.from || '처음'} ~ ${range.to || '끝'}`
+        : '전체';
+      toast(`선택한 기간(${rangeLabel})에 해당하는 주문이 없습니다.`, 'error');
       return;
     }
     const statusMap = {
@@ -638,7 +779,7 @@
       '주문번호', '상품권일련번호', '상품명', '수량', '결제금액',
       '받는분', '연락처', '우편번호', '주소', '상세주소', '배송메모', '상태', '주문일시'
     ];
-    const rows = state.orders.map(o => [
+    const rows = filtered.map(o => [
       '#' + o.id,
       o.voucher_serial || '',
       o.product_name || '',
@@ -656,7 +797,10 @@
     const tsv = buildTsv(headers, rows);
     const ok = await copyToClipboard(tsv);
     if (ok) {
-      toast(`✅ 주문 ${state.orders.length}건이 클립보드에 복사되었습니다. (엑셀/구글 시트에 붙여넣기 가능)`, 'success');
+      const rangeLabel = (range.from || range.to)
+        ? `${range.from || '처음'} ~ ${range.to || '끝'}`
+        : '전체';
+      toast(`✅ 주문 ${filtered.length}건 복사 완료 (기간: ${rangeLabel})`, 'success');
     } else {
       toast('❌ 복사에 실패했습니다. 브라우저 권한을 확인해주세요.', 'error');
     }
