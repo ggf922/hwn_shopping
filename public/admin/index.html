@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>하원나라 - 관리자</title>
-  <link rel="stylesheet" href="/css/style.css?v=7" />
+  <link rel="stylesheet" href="/css/style.css?v=11" />
 </head>
 <body>
   <header class="site-header">
@@ -52,7 +52,10 @@
     <section id="tab-voucher-list" class="tab-panel hidden">
       <div class="toolbar">
         <h3>📋 발권된 상품권 목록</h3>
-        <button class="btn btn-secondary btn-sm" id="refresh-vouchers">새로고침</button>
+        <div class="toolbar-actions">
+          <button class="btn btn-secondary btn-sm" id="copy-vouchers" title="엑셀/구글 시트에 붙여넣기 가능한 형식으로 복사">📋 복사하기</button>
+          <button class="btn btn-secondary btn-sm" id="refresh-vouchers">새로고침</button>
+        </div>
       </div>
       <table class="data-table">
         <thead>
@@ -99,7 +102,10 @@
     <section id="tab-orders" class="tab-panel hidden">
       <div class="toolbar">
         <h3>🧾 주문 내역</h3>
-        <button class="btn btn-secondary btn-sm" id="refresh-orders">새로고침</button>
+        <div class="toolbar-actions">
+          <button class="btn btn-secondary btn-sm" id="copy-orders" title="엑셀/구글 시트에 붙여넣기 가능한 형식으로 복사">📋 복사하기</button>
+          <button class="btn btn-secondary btn-sm" id="refresh-orders">새로고침</button>
+        </div>
       </div>
       <table class="data-table">
         <thead>
@@ -177,6 +183,6 @@
     </div>
   </div>
 
-  <script src="/js/admin.js?v=7"></script>
+  <script src="/js/admin.js?v=8"></script>
 </body>
 </html>

@@ -44,6 +44,44 @@
     setTimeout(() => el.remove(), 3000);
   }
 
+  // ── 클립보드 복사 헬퍼 ──
+  // 셀 내부의 줄바꿈/탭/따옴표를 안전하게 처리 (엑셀/구글 시트 호환)
+  function sanitizeCell(v) {
+    if (v == null) return '';
+    let s = String(v).replace(/\r\n|\r|\n/g, ' ').replace(/\t/g, ' ').trim();
+    // 셀 내부에 따옴표가 있으면 escape 후 전체를 따옴표로 감싸기 (엑셀 TSV 규칙)
+    if (s.includes('"')) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  function buildTsv(headers, rows) {
+    const head = headers.join('\t');
+    const body = rows.map(r => r.map(sanitizeCell).join('\t')).join('\n');
+    return head + '\n' + body;
+  }
+  async function copyToClipboard(text) {
+    // 1) Modern API
+    if (navigator.clipboard && window.isSecureContext) {
+      try { await navigator.clipboard.writeText(text); return true; } catch (_) {}
+    }
+    // 2) Fallback: textarea + execCommand
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function getToken() {
     return localStorage.getItem('admin_token') || '';
   }
@@ -248,6 +286,31 @@
   }
 
   $('#refresh-vouchers').addEventListener('click', loadVouchers);
+
+  // ── 상품권 목록 복사 (엑셀/구글 시트용 TSV) ──
+  async function copyVouchersToClipboard() {
+    if (!state.vouchers || state.vouchers.length === 0) {
+      toast('복사할 상품권이 없습니다. (목록을 먼저 불러와 주세요)', 'error');
+      return;
+    }
+    const headers = ['일련번호', '액면가', '잔액', '상태', '발권일', '사용일'];
+    const rows = state.vouchers.map(v => [
+      v.serial,
+      Number(v.amount),
+      Number(v.balance),
+      v.status === 'active' ? '사용가능' : '사용완료',
+      fmtDate(v.issued_at),
+      v.used_at ? fmtDate(v.used_at) : ''
+    ]);
+    const tsv = buildTsv(headers, rows);
+    const ok = await copyToClipboard(tsv);
+    if (ok) {
+      toast(`✅ 상품권 ${state.vouchers.length}건이 클립보드에 복사되었습니다. (엑셀/구글 시트에 붙여넣기 가능)`, 'success');
+    } else {
+      toast('❌ 복사에 실패했습니다. 브라우저 권한을 확인해주세요.', 'error');
+    }
+  }
+  $('#copy-vouchers').addEventListener('click', copyVouchersToClipboard);
 
   // ─────────────────────────────────────────
   // 제품 관리
@@ -557,4 +620,46 @@
   });
 
   $('#refresh-orders').addEventListener('click', loadOrders);
+
+  // ── 주문 내역 복사 (엑셀/구글 시트용 TSV) ──
+  async function copyOrdersToClipboard() {
+    if (!state.orders || state.orders.length === 0) {
+      toast('복사할 주문이 없습니다. (목록을 먼저 불러와 주세요)', 'error');
+      return;
+    }
+    const statusMap = {
+      pending: '결제완료',
+      preparing: '상품준비중',
+      shipped: '배송중',
+      delivered: '배송완료',
+      cancelled: '취소'
+    };
+    const headers = [
+      '주문번호', '상품권일련번호', '상품명', '수량', '결제금액',
+      '받는분', '연락처', '우편번호', '주소', '상세주소', '배송메모', '상태', '주문일시'
+    ];
+    const rows = state.orders.map(o => [
+      '#' + o.id,
+      o.voucher_serial || '',
+      o.product_name || '',
+      Number(o.quantity || 0),
+      Number(o.total_price || 0),
+      o.recipient_name || '',
+      o.recipient_phone || '',
+      o.recipient_zipcode || '',
+      o.recipient_address || '',
+      o.recipient_address_detail || '',
+      o.delivery_memo || '',
+      statusMap[o.status] || o.status || '결제완료',
+      fmtDate(o.created_at)
+    ]);
+    const tsv = buildTsv(headers, rows);
+    const ok = await copyToClipboard(tsv);
+    if (ok) {
+      toast(`✅ 주문 ${state.orders.length}건이 클립보드에 복사되었습니다. (엑셀/구글 시트에 붙여넣기 가능)`, 'success');
+    } else {
+      toast('❌ 복사에 실패했습니다. 브라우저 권한을 확인해주세요.', 'error');
+    }
+  }
+  $('#copy-orders').addEventListener('click', copyOrdersToClipboard);
 })();

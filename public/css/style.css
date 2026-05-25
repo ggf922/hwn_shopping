@@ -497,6 +497,12 @@ button { cursor: pointer; font-family: inherit; }
   gap: 12px;
   flex-wrap: wrap;
 }
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
 
 .data-table {
   width: 100%;
