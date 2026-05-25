@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>하원나라 - 프리미엄 쇼핑몰</title>
-  <link rel="stylesheet" href="/css/style.css?v=9" />
+  <link rel="stylesheet" href="/css/style.css?v=10" />
   <!-- 다음(카카오) 우편번호 검색 API -->
   <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
@@ -106,6 +106,21 @@
         <textarea id="delivery-memo" placeholder="부재 시 경비실에 맡겨 주세요."></textarea>
       </div>
 
+      <!-- 개인정보 수집 및 이용 동의 -->
+      <div class="privacy-consent">
+        <label class="privacy-check">
+          <input type="checkbox" id="privacy-agree" />
+          <span><strong>[필수]</strong> 개인정보 수집 및 이용에 동의합니다.</span>
+        </label>
+        <button type="button" class="privacy-toggle-btn" id="privacy-toggle-btn" aria-expanded="false">자세히 보기 ▼</button>
+        <div class="privacy-details hidden" id="privacy-details">
+          <p><strong>· 수집 항목</strong>: 받는 분 성함, 연락처, 우편번호, 주소, 상세 주소, 배송 메모</p>
+          <p><strong>· 수집·이용 목적</strong>: 주문 상품의 배송, 배송 관련 안내 및 고객 문의 대응</p>
+          <p><strong>· 보유·이용 기간</strong>: 전자상거래 등에서의 소비자 보호에 관한 법률에 따라 배송 완료 후 5년간 보관 후 파기</p>
+          <p class="privacy-notice">※ 위 개인정보 수집·이용에 동의하지 않으실 수 있으나, 동의하지 않으실 경우 상품 배송이 불가능합니다.</p>
+        </div>
+      </div>
+
       <div class="total-line">
         <span>결제 금액</span>
         <strong id="purchase-total">0원</strong>
@@ -135,6 +150,6 @@
     </div>
   </footer>
 
-  <script src="/js/shop.js?v=9"></script>
+  <script src="/js/shop.js?v=10"></script>
 </body>
 </html>

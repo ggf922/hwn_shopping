@@ -147,6 +147,18 @@
     purchaseQuantity.value = 1;
     purchaseQuantity.max = product.stock;
     updatePurchaseTotal();
+    // 모달을 열 때마다 개인정보 동의는 초기화 (체크 해제)
+    const privacyAgreeEl = $('#privacy-agree');
+    if (privacyAgreeEl) privacyAgreeEl.checked = false;
+    const privacyDetailsEl = $('#privacy-details');
+    const privacyToggleEl = $('#privacy-toggle-btn');
+    if (privacyDetailsEl && !privacyDetailsEl.classList.contains('hidden')) {
+      privacyDetailsEl.classList.add('hidden');
+      if (privacyToggleEl) {
+        privacyToggleEl.setAttribute('aria-expanded', 'false');
+        privacyToggleEl.textContent = '자세히 보기 ▼';
+      }
+    }
     purchaseModal.classList.remove('hidden');
   }
 
@@ -182,6 +194,12 @@
     if (!shipping.recipient_name) return toast('받는 분 성함을 입력해주세요.', 'error');
     if (!shipping.recipient_phone) return toast('연락처를 입력해주세요.', 'error');
     if (!shipping.recipient_address) return toast('🔍 주소 검색 버튼을 눌러 주소를 선택해주세요.', 'error');
+    // 개인정보 수집·이용 동의 확인
+    const privacyAgreeEl = $('#privacy-agree');
+    if (privacyAgreeEl && !privacyAgreeEl.checked) {
+      privacyAgreeEl.focus();
+      return toast('개인정보 수집 및 이용에 동의해 주세요.', 'error');
+    }
 
     try {
       confirmPurchaseBtn.disabled = true;
@@ -291,6 +309,17 @@
   if (postcodeLayer) {
     postcodeLayer.addEventListener('click', (e) => {
       if (e.target === postcodeLayer) closeAddressSearch();
+    });
+  }
+
+  // ── 개인정보 동의 자세히 보기 토글 ──
+  const privacyToggleBtn = $('#privacy-toggle-btn');
+  const privacyDetails = $('#privacy-details');
+  if (privacyToggleBtn && privacyDetails) {
+    privacyToggleBtn.addEventListener('click', () => {
+      const isHidden = privacyDetails.classList.toggle('hidden');
+      privacyToggleBtn.setAttribute('aria-expanded', String(!isHidden));
+      privacyToggleBtn.textContent = isHidden ? '자세히 보기 ▼' : '접기 ▲';
     });
   }
 

@@ -226,10 +226,21 @@
   }
 
   async function deleteVoucher(serial) {
-    if (!confirm(`상품권 "${serial}"을(를) 삭제하시겠습니까?`)) return;
+    if (!confirm(`상품권 "${serial}"을(를) 삭제하시겠습니까?\n\n※ 주문 이력이 있는 상품권은 목록에서 숨김 처리되며 주문 기록은 보존됩니다.`)) return;
     try {
-      await api(`/api/vouchers/${encodeURIComponent(serial)}`, { method: 'DELETE' });
-      toast('✅ 삭제되었습니다.', 'success');
+      // 서버가 { success, mode: 'hard'|'soft', message } 형태로 응답하므로 raw fetch 사용
+      const token = getToken();
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: 'Bearer ' + token } : {})
+      };
+      const r = await fetch(`/api/vouchers/${encodeURIComponent(serial)}`, { method: 'DELETE', headers });
+      if (r.status === 401) { redirectToLogin(); return; }
+      const json = await r.json();
+      if (!json.success) throw new Error(json.error || '삭제 실패');
+      const icon = json.mode === 'soft' ? '📦' : '✅';
+      const message = json.message || '삭제되었습니다.';
+      toast(`${icon} ${message}`, 'success');
       loadVouchers();
     } catch (e) {
       toast(`❌ ${e.message}`, 'error');

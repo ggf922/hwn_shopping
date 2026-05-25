@@ -281,7 +281,12 @@ const VALID_AMOUNTS = [10000, 20000, 50000, 100000, 300000, 500000, 1000000];
 // 상품권 목록 (관리자)
 app.get('/api/vouchers', auth.requireAdmin, (req, res) => {
   try {
-    const rows = db.prepare('SELECT * FROM vouchers ORDER BY issued_at DESC').all();
+    // ?include_deleted=1 인 경우 소프트 삭제된 상품권도 포함
+    const includeDeleted = req.query.include_deleted === '1';
+    const sql = includeDeleted
+      ? 'SELECT * FROM vouchers ORDER BY issued_at DESC'
+      : 'SELECT * FROM vouchers WHERE COALESCE(is_deleted, 0) = 0 ORDER BY issued_at DESC';
+    const rows = db.prepare(sql).all();
     res.json({ success: true, data: rows });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
@@ -338,12 +343,31 @@ app.post('/api/vouchers', auth.requireAdmin, (req, res) => {
 });
 
 // 상품권 삭제 (관리자)
+// - 주문 이력이 없으면 하드 삭제
+// - 주문 이력이 있으면 소프트 삭제 (is_deleted = 1) — orders FK 충돌 방지 + 주문 이력 보존
 app.delete('/api/vouchers/:serial', auth.requireAdmin, (req, res) => {
   try {
-    const result = db.prepare('DELETE FROM vouchers WHERE serial = ?').run(req.params.serial);
-    if (result.changes === 0) return res.status(404).json({ success: false, error: '상품권을 찾을 수 없습니다.' });
-    res.json({ success: true });
+    const serial = req.params.serial;
+    const existing = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(serial);
+    if (!existing) return res.status(404).json({ success: false, error: '상품권을 찾을 수 없습니다.' });
+
+    const orderCount = db.prepare('SELECT COUNT(*) AS c FROM orders WHERE voucher_serial = ?').get(serial).c;
+
+    if (orderCount === 0) {
+      // 주문 이력 없음 → 완전 삭제
+      db.prepare('DELETE FROM vouchers WHERE serial = ?').run(serial);
+      return res.json({ success: true, mode: 'hard', message: '상품권이 삭제되었습니다.' });
+    }
+
+    // 주문 이력 있음 → 소프트 삭제 (목록에서는 숨김, 주문 이력은 그대로 유지)
+    db.prepare('UPDATE vouchers SET is_deleted = 1 WHERE serial = ?').run(serial);
+    res.json({
+      success: true,
+      mode: 'soft',
+      message: `주문 이력이 있어 목록에서 숨김 처리되었습니다. (관련 주문 ${orderCount}건 보존)`
+    });
   } catch (e) {
+    console.error('상품권 삭제 오류:', e);
     res.status(500).json({ success: false, error: e.message });
   }
 });
