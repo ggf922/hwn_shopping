@@ -276,7 +276,7 @@ app.delete('/api/products/:id', auth.requireAdmin, (req, res) => {
 // ─────────────────────────────────────────────
 
 // 발권 가능 금액
-const VALID_AMOUNTS = [10000, 20000, 50000, 100000, 300000, 500000, 1000000];
+const VALID_AMOUNTS = [10000, 50000, 144000, 500000];
 
 // 상품권 목록 (관리자)
 app.get('/api/vouchers', auth.requireAdmin, (req, res) => {

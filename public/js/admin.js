@@ -5,7 +5,7 @@
   'use strict';
 
   // ── 상수 ──
-  const VOUCHER_AMOUNTS = [10000, 20000, 50000, 100000, 300000, 500000, 1000000];
+  const VOUCHER_AMOUNTS = [10000, 50000, 144000, 500000];
 
   // ── 상태 ──
   const state = {
