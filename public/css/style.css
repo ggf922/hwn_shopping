@@ -461,9 +461,86 @@ button { cursor: pointer; font-family: inherit; }
 .site-footer {
   background: var(--black);
   color: #888;
-  padding: 24px 0;
+  padding: 32px 0 24px;
   text-align: center;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+.site-footer .footer-brand {
+  margin-bottom: 14px;
+  color: #d4af37;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+.site-footer .footer-brand .brand-en {
+  margin-left: 6px;
+  font-size: 0.75rem;
+  color: #999;
+  letter-spacing: 0.18em;
+}
+.site-footer .footer-business {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.site-footer .biz-info {
+  margin: 0;
+  text-align: left;
+  max-width: 760px;
+  width: 100%;
+  color: #aaa;
+}
+.site-footer .biz-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 3px 0;
+}
+.site-footer .biz-info dt {
+  color: #d4af37;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.site-footer .biz-info dt::after {
+  content: ':';
+  margin-left: 2px;
+  margin-right: 4px;
+  color: #555;
+}
+.site-footer .biz-info dd {
+  margin: 0;
+  margin-right: 12px;
+  color: #ccc;
+}
+.site-footer .biz-verify {
+  margin-left: 6px;
+  color: #888;
+  text-decoration: none;
+  font-size: 0.78rem;
+  transition: color 0.15s;
+}
+.site-footer .biz-verify:hover {
+  color: #d4af37;
+  text-decoration: underline;
+}
+.site-footer .footer-copy {
+  margin: 12px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid #2a2a2a;
+  color: #666;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 640px) {
+  .site-footer .biz-row {
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 0;
+  }
+  .site-footer .biz-info dd {
+    margin-right: 0;
+    padding-left: 6px;
+  }
 }
 
 /* ── 관리자 ── */
