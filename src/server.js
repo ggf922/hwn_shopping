@@ -345,26 +345,44 @@ app.post('/api/vouchers', auth.requireAdmin, (req, res) => {
 // 상품권 삭제 (관리자)
 // - 주문 이력이 없으면 하드 삭제
 // - 주문 이력이 있으면 소프트 삭제 (is_deleted = 1) — orders FK 충돌 방지 + 주문 이력 보존
+// ※ 다중 상품권 결제 지원으로 인해 orders.voucher_serial 뿐 아니라
+//   order_voucher_usages.voucher_serial 도 함께 확인해야 함
 app.delete('/api/vouchers/:serial', auth.requireAdmin, (req, res) => {
   try {
     const serial = req.params.serial;
     const existing = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(serial);
     if (!existing) return res.status(404).json({ success: false, error: '상품권을 찾을 수 없습니다.' });
 
-    const orderCount = db.prepare('SELECT COUNT(*) AS c FROM orders WHERE voucher_serial = ?').get(serial).c;
+    // 1) orders.voucher_serial 에서의 참조 (primary serial)
+    const primaryRefCount = db.prepare(
+      'SELECT COUNT(*) AS c FROM orders WHERE voucher_serial = ?'
+    ).get(serial).c;
+    // 2) order_voucher_usages.voucher_serial 에서의 참조 (다중 결제 시 보조 사용)
+    const usageRefCount = db.prepare(
+      'SELECT COUNT(*) AS c FROM order_voucher_usages WHERE voucher_serial = ?'
+    ).get(serial).c;
+    const totalRefCount = primaryRefCount + usageRefCount;
 
-    if (orderCount === 0) {
-      // 주문 이력 없음 → 완전 삭제
+    if (totalRefCount === 0) {
+      // 어떤 주문에서도 사용되지 않음 → 완전 삭제
       db.prepare('DELETE FROM vouchers WHERE serial = ?').run(serial);
       return res.json({ success: true, mode: 'hard', message: '상품권이 삭제되었습니다.' });
     }
 
     // 주문 이력 있음 → 소프트 삭제 (목록에서는 숨김, 주문 이력은 그대로 유지)
     db.prepare('UPDATE vouchers SET is_deleted = 1 WHERE serial = ?').run(serial);
+    // 영향받은 주문 수 (중복 제거)
+    const distinctOrderCount = db.prepare(`
+      SELECT COUNT(DISTINCT order_id) AS c FROM (
+        SELECT id AS order_id FROM orders WHERE voucher_serial = ?
+        UNION
+        SELECT order_id FROM order_voucher_usages WHERE voucher_serial = ?
+      )
+    `).get(serial, serial).c;
     res.json({
       success: true,
       mode: 'soft',
-      message: `주문 이력이 있어 목록에서 숨김 처리되었습니다. (관련 주문 ${orderCount}건 보존)`
+      message: `주문 이력이 있어 목록에서 숨김 처리되었습니다. (관련 주문 ${distinctOrderCount}건 보존)`
     });
   } catch (e) {
     console.error('상품권 삭제 오류:', e);
