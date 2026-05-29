@@ -52,6 +52,20 @@ db.exec(`
     FOREIGN KEY (voucher_serial) REFERENCES vouchers(serial),
     FOREIGN KEY (product_id) REFERENCES products(id)
   );
+
+  CREATE TABLE IF NOT EXISTS order_voucher_usages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    voucher_serial TEXT NOT NULL,
+    amount_used INTEGER NOT NULL,
+    sequence INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(id),
+    FOREIGN KEY (voucher_serial) REFERENCES vouchers(serial)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_order_voucher_usages_order_id ON order_voucher_usages(order_id);
+  CREATE INDEX IF NOT EXISTS idx_order_voucher_usages_voucher_serial ON order_voucher_usages(voucher_serial);
 `);
 
 // 마이그레이션: 기존 orders 테이블에 배송정보 컬럼이 없으면 추가
@@ -90,6 +104,33 @@ addColumnIfMissing('products', 'sort_order', 'INTEGER');
     });
     tx();
     console.log(`[DB] 마이그레이션: products.sort_order 초기값 ${nullRows.length}건 적용`);
+  }
+})();
+
+// 마이그레이션: 기존 주문(단일 상품권 결제)에 대해 order_voucher_usages 백필
+// — 기존 주문은 voucher_serial 한 장으로 total_price 전액 결제된 것으로 간주
+(() => {
+  try {
+    const missingRows = db.prepare(`
+      SELECT o.id, o.voucher_serial, o.total_price
+      FROM orders o
+      LEFT JOIN order_voucher_usages u ON u.order_id = o.id
+      WHERE u.id IS NULL
+    `).all();
+    if (missingRows.length > 0) {
+      const insert = db.prepare(
+        'INSERT INTO order_voucher_usages (order_id, voucher_serial, amount_used, sequence) VALUES (?, ?, ?, ?)'
+      );
+      const tx = db.transaction(() => {
+        for (const r of missingRows) {
+          insert.run(r.id, r.voucher_serial, r.total_price, 1);
+        }
+      });
+      tx();
+      console.log(`[DB] 마이그레이션: order_voucher_usages 백필 ${missingRows.length}건 적용`);
+    }
+  } catch (e) {
+    console.error('[DB] order_voucher_usages 백필 실패:', e.message);
   }
 })();
 

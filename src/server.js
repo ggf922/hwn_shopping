@@ -399,10 +399,13 @@ app.get('/api/vouchers/:serial/image', async (req, res) => {
 // ─────────────────────────────────────────────
 
 // 구매 처리
+// — 다중 상품권 결제 지원: voucher_serials[] (FIFO 순서로 차감)
+// — 단일 상품권 결제 호환: voucher_serial (단일 문자열) 도 허용
 app.post('/api/orders', (req, res) => {
   try {
     const {
-      voucher_serial,
+      voucher_serials,           // 신규: 배열
+      voucher_serial,            // 구버전 호환: 단일
       product_id,
       quantity = 1,
       recipient_name,
@@ -413,8 +416,25 @@ app.post('/api/orders', (req, res) => {
       delivery_memo
     } = req.body;
 
-    if (!voucher_serial || !product_id) {
+    // 상품권 시리얼 목록 정리 (FIFO 순서 유지)
+    let serials = [];
+    if (Array.isArray(voucher_serials) && voucher_serials.length > 0) {
+      serials = voucher_serials.map(s => String(s || '').trim().toUpperCase()).filter(Boolean);
+    } else if (voucher_serial) {
+      serials = [String(voucher_serial).trim().toUpperCase()];
+    }
+
+    if (serials.length === 0 || !product_id) {
       return res.status(400).json({ success: false, error: '상품권 번호와 제품을 선택해주세요.' });
+    }
+
+    // 중복 시리얼 차단 (한 주문에서 같은 상품권을 두 번 사용 불가)
+    const dupCheck = new Set();
+    for (const s of serials) {
+      if (dupCheck.has(s)) {
+        return res.status(400).json({ success: false, error: `같은 상품권이 중복으로 등록되어 있습니다: ${s}` });
+      }
+      dupCheck.add(s);
     }
 
     // 배송정보 필수 검증
@@ -425,10 +445,23 @@ app.post('/api/orders', (req, res) => {
       });
     }
 
-    const voucher = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(voucher_serial);
-    if (!voucher) return res.status(404).json({ success: false, error: '존재하지 않는 상품권입니다.' });
-    if (voucher.status !== 'active') {
-      return res.status(400).json({ success: false, error: '사용할 수 없는 상품권입니다.' });
+    // 상품권 사전 검증 (모두 존재 + 사용 가능 + 잔액 합이 결제액 이상)
+    const vouchers = [];
+    for (const s of serials) {
+      const v = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(s);
+      if (!v) {
+        return res.status(404).json({ success: false, error: `존재하지 않는 상품권입니다: ${s}` });
+      }
+      if (v.is_deleted) {
+        return res.status(400).json({ success: false, error: `사용할 수 없는(삭제됨) 상품권입니다: ${s}` });
+      }
+      if (v.status !== 'active') {
+        return res.status(400).json({ success: false, error: `이미 사용 완료된 상품권입니다: ${s}` });
+      }
+      if (v.balance <= 0) {
+        return res.status(400).json({ success: false, error: `잔액이 없는 상품권입니다: ${s}` });
+      }
+      vouchers.push(v);
     }
 
     const product = db.prepare('SELECT * FROM products WHERE id = ?').get(product_id);
@@ -443,58 +476,103 @@ app.post('/api/orders', (req, res) => {
     }
 
     const totalPrice = product.price * qty;
-    if (voucher.balance < totalPrice) {
+    const totalBalance = vouchers.reduce((sum, v) => sum + v.balance, 0);
+    if (totalBalance < totalPrice) {
       return res.status(400).json({
         success: false,
-        error: `상품권 잔액이 부족합니다. (잔액: ${voucher.balance.toLocaleString()}원, 필요: ${totalPrice.toLocaleString()}원)`
+        error: `상품권 잔액 합계가 부족합니다. (잔액 합계: ${totalBalance.toLocaleString()}원, 필요: ${totalPrice.toLocaleString()}원)`
       });
     }
 
-    // 트랜잭션
+    // 트랜잭션 — FIFO로 상품권 차감 + 주문 생성 + 사용 내역 기록
     const tx = db.transaction(() => {
-      const newBalance = voucher.balance - totalPrice;
-      const newStatus = newBalance === 0 ? 'used' : 'active';
-      const usedAt = newBalance === 0 ? new Date().toISOString() : null;
+      let remaining = totalPrice;
+      const usages = []; // [{ serial, amount_used, sequence }]
+      const nowIso = new Date().toISOString();
 
-      db.prepare(
-        'UPDATE vouchers SET balance = ?, status = ?, used_at = ? WHERE serial = ?'
-      ).run(newBalance, newStatus, usedAt, voucher_serial);
+      for (let i = 0; i < vouchers.length && remaining > 0; i++) {
+        const v = vouchers[i];
+        const take = Math.min(remaining, v.balance);
+        const newBalance = v.balance - take;
+        const newStatus = newBalance === 0 ? 'used' : 'active';
+        const usedAt = newBalance === 0 ? nowIso : v.used_at;
 
+        db.prepare(
+          'UPDATE vouchers SET balance = ?, status = ?, used_at = ? WHERE serial = ?'
+        ).run(newBalance, newStatus, usedAt, v.serial);
+
+        usages.push({ serial: v.serial, amount_used: take, sequence: i + 1 });
+        remaining -= take;
+      }
+
+      // 재고 차감
       db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(qty, product_id);
 
-      const result = db
-        .prepare(
-          `INSERT INTO orders (
-            voucher_serial, product_id, product_name, quantity, total_price,
-            recipient_name, recipient_phone, recipient_zipcode,
-            recipient_address, recipient_address_detail, delivery_memo
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          voucher_serial, product_id, product.name, qty, totalPrice,
-          recipient_name || '',
-          recipient_phone || '',
-          recipient_zipcode || '',
-          recipient_address || '',
-          recipient_address_detail || '',
-          delivery_memo || ''
-        );
-      return result.lastInsertRowid;
+      // 주문 행 생성 — orders.voucher_serial 에는 첫 번째 사용 상품권 보존 (구버전 호환)
+      const primarySerial = usages[0].serial;
+      const insertOrder = db.prepare(
+        `INSERT INTO orders (
+          voucher_serial, product_id, product_name, quantity, total_price,
+          recipient_name, recipient_phone, recipient_zipcode,
+          recipient_address, recipient_address_detail, delivery_memo
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      const result = insertOrder.run(
+        primarySerial, product_id, product.name, qty, totalPrice,
+        recipient_name || '',
+        recipient_phone || '',
+        recipient_zipcode || '',
+        recipient_address || '',
+        recipient_address_detail || '',
+        delivery_memo || ''
+      );
+      const orderId = result.lastInsertRowid;
+
+      // 사용 내역 기록
+      const insertUsage = db.prepare(
+        'INSERT INTO order_voucher_usages (order_id, voucher_serial, amount_used, sequence) VALUES (?, ?, ?, ?)'
+      );
+      for (const u of usages) {
+        insertUsage.run(orderId, u.serial, u.amount_used, u.sequence);
+      }
+      return orderId;
     });
     const orderId = tx();
 
     const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
-    const updatedVoucher = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(voucher_serial);
-    res.status(201).json({ success: true, data: { order, voucher: updatedVoucher } });
+    const usages = db.prepare(
+      'SELECT voucher_serial, amount_used, sequence FROM order_voucher_usages WHERE order_id = ? ORDER BY sequence ASC'
+    ).all(orderId);
+    const updatedVouchers = serials.map(s =>
+      db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(s)
+    );
+
+    res.status(201).json({
+      success: true,
+      data: {
+        order,
+        usages,
+        vouchers: updatedVouchers,
+        // 구버전 호환 — 첫 상품권 정보
+        voucher: updatedVouchers[0]
+      }
+    });
   } catch (e) {
+    console.error('주문 생성 오류:', e);
     res.status(500).json({ success: false, error: e.message });
   }
 });
 
-// 주문 목록 (관리자)
+// 주문 목록 (관리자) — 각 주문에 사용된 상품권 내역(usages) 포함
 app.get('/api/orders', auth.requireAdmin, (req, res) => {
   try {
     const rows = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
+    const usageStmt = db.prepare(
+      'SELECT voucher_serial, amount_used, sequence FROM order_voucher_usages WHERE order_id = ? ORDER BY sequence ASC'
+    );
+    for (const r of rows) {
+      r.usages = usageStmt.all(r.id);
+    }
     res.json({ success: true, data: rows });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });

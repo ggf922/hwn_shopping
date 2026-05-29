@@ -953,3 +953,191 @@ button { cursor: pointer; font-family: inherit; }
   .modal-content.modal-lg { max-width: 100%; }
   .login-card { padding: 30px 22px; }
 }
+
+/* ─────────────────────────────────────────────
+   다중 상품권 결제 UI
+   ───────────────────────────────────────────── */
+
+.voucher-hint {
+  margin: 6px 0 10px;
+  color: #777;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.voucher-list-wrap {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+}
+
+.voucher-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.9rem;
+  color: #555;
+  margin-bottom: 8px;
+}
+.voucher-list-header .voucher-total strong {
+  color: var(--gold-dark, #b8860b);
+  font-size: 1rem;
+  margin-left: 4px;
+}
+
+.voucher-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.voucher-item {
+  display: grid;
+  grid-template-columns: 32px 1fr auto 32px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  font-size: 0.92rem;
+}
+
+.voucher-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: var(--gold-dark, #b8860b);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.voucher-serial-text {
+  font-family: 'Menlo', 'Consolas', monospace;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+}
+
+.voucher-balance-text {
+  color: #555;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.voucher-remove-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #888;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.voucher-remove-btn:hover {
+  background: #ffe9e9;
+  border-color: #f5b5b5;
+  color: var(--red, #d33);
+}
+
+/* 구매 모달 — 상품권 사용 순서 미리보기 */
+.purchase-usage-preview {
+  margin: 10px 0 14px;
+  padding: 12px 14px;
+  background: #fff8e7;
+  border: 1px solid #f0d893;
+  border-radius: 8px;
+}
+
+.purchase-usage-preview .usage-title {
+  font-size: 0.88rem;
+  color: #8a6d1a;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.usage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.88rem;
+}
+
+.usage-list li {
+  display: grid;
+  grid-template-columns: 24px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  color: #333;
+}
+
+.usage-list .usage-seq {
+  color: #8a6d1a;
+  font-weight: 600;
+}
+
+.usage-list .usage-serial {
+  font-family: 'Menlo', 'Consolas', monospace;
+  font-size: 0.82rem;
+  color: #555;
+  word-break: break-all;
+}
+
+.usage-list .usage-amount {
+  color: var(--red, #d33);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.usage-list .usage-after {
+  color: #777;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.usage-list .usage-shortfall {
+  display: block;
+  color: var(--red, #d33);
+  font-weight: 500;
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 600px) {
+  .voucher-item {
+    grid-template-columns: 28px 1fr 32px;
+    grid-template-rows: auto auto;
+    row-gap: 4px;
+  }
+  .voucher-balance-text {
+    grid-column: 2 / 3;
+    grid-row: 2;
+    font-size: 0.85rem;
+  }
+  .voucher-remove-btn {
+    grid-column: 3 / 4;
+    grid-row: 1 / 3;
+  }
+  .usage-list li {
+    grid-template-columns: 22px 1fr;
+    grid-template-rows: auto auto;
+    row-gap: 2px;
+  }
+  .usage-list .usage-amount,
+  .usage-list .usage-after {
+    grid-column: 2 / 3;
+  }
+}

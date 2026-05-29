@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>하원나라 - 프리미엄 쇼핑몰</title>
-  <link rel="stylesheet" href="/css/style.css?v=10" />
+  <link rel="stylesheet" href="/css/style.css?v=13" />
   <!-- 다음(카카오) 우편번호 검색 API -->
   <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
@@ -42,6 +42,10 @@
     <!-- 상품권 사용 영역 -->
     <section class="voucher-section card">
       <h3>🎁 상품권 사용하기</h3>
+      <p class="voucher-hint">
+        여러 장의 상품권을 등록하면 등록한 순서대로 차감됩니다.
+        (예: 47,500원 결제 시 ①사용하다 남은 상품권 → ②③④ 10,000원 상품권 순으로 차감)
+      </p>
       <div class="voucher-input">
         <input
           type="text"
@@ -49,9 +53,18 @@
           placeholder="상품권 번호 입력 (예: HWN-2026-AF93875)"
           autocomplete="off"
         />
-        <button id="check-voucher-btn" class="btn btn-primary">확인</button>
+        <button id="check-voucher-btn" class="btn btn-primary">＋ 추가</button>
       </div>
       <div id="voucher-status" class="voucher-status hidden"></div>
+
+      <!-- 등록된 상품권 목록 -->
+      <div id="voucher-list-wrap" class="voucher-list-wrap hidden">
+        <div class="voucher-list-header">
+          <span>등록된 상품권 (사용 순서)</span>
+          <span class="voucher-total">합계 잔액: <strong id="voucher-total-balance">0원</strong></span>
+        </div>
+        <ul id="voucher-list" class="voucher-list"></ul>
+      </div>
     </section>
 
     <!-- 제품 목록 -->
@@ -126,9 +139,16 @@
         <strong id="purchase-total">0원</strong>
       </div>
       <div class="total-line">
-        <span>상품권 잔액</span>
+        <span>상품권 합계 잔액</span>
         <strong id="purchase-balance">0원</strong>
       </div>
+
+      <!-- 사용될 상품권 사용 순서 미리보기 -->
+      <div id="purchase-usage-preview" class="purchase-usage-preview hidden">
+        <div class="usage-title">상품권 사용 순서</div>
+        <ol id="purchase-usage-list" class="usage-list"></ol>
+      </div>
+
       <button id="confirm-purchase-btn" class="btn btn-primary btn-block">구매하기</button>
     </div>
   </div>
@@ -150,6 +170,6 @@
     </div>
   </footer>
 
-  <script src="/js/shop.js?v=10"></script>
+  <script src="/js/shop.js?v=13"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 /**
- * 하원나라 쇼핑몰 프론트엔드 로직
+ * 하원나라 쇼핑몰 프론트엔드 로직 (다중 상품권 결제 지원)
  */
 (() => {
   'use strict';
@@ -7,7 +7,7 @@
   // ── 상태 ──
   const state = {
     products: [],
-    voucher: null,         // 현재 등록된 상품권
+    vouchers: [],          // 등록된 상품권 배열 (FIFO 결제 순서)
     selectedProduct: null  // 구매 모달용
   };
 
@@ -17,16 +17,21 @@
   const voucherInput = $('#voucher-serial-input');
   const voucherStatus = $('#voucher-status');
   const checkVoucherBtn = $('#check-voucher-btn');
+  const voucherListWrap = $('#voucher-list-wrap');
+  const voucherListEl = $('#voucher-list');
+  const voucherTotalBalanceEl = $('#voucher-total-balance');
   const purchaseModal = $('#purchase-modal');
   const modalCloseBtn = $('#modal-close');
   const modalProductInfo = $('#modal-product-info');
   const purchaseQuantity = $('#purchase-quantity');
   const purchaseTotal = $('#purchase-total');
   const purchaseBalance = $('#purchase-balance');
+  const purchaseUsagePreview = $('#purchase-usage-preview');
+  const purchaseUsageList = $('#purchase-usage-list');
   const confirmPurchaseBtn = $('#confirm-purchase-btn');
 
   // ── 유틸 ──
-  const fmt = (n) => Number(n).toLocaleString('ko-KR') + '원';
+  const fmt = (n) => Number(n || 0).toLocaleString('ko-KR') + '원';
 
   function toast(msg, type = 'info') {
     const el = document.createElement('div');
@@ -44,6 +49,15 @@
     const data = await res.json();
     if (!data.success) throw new Error(data.error || '요청 실패');
     return data.data;
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // ── 제품 로드 ──
@@ -84,38 +98,75 @@
     });
   }
 
-  function escapeHtml(str) {
-    return String(str || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+  // ── 상품권 등록 (다중) ──
+  function getTotalBalance() {
+    return state.vouchers.reduce((sum, v) => sum + (v.balance || 0), 0);
   }
 
-  // ── 상품권 확인 ──
-  async function checkVoucher() {
+  async function addVoucher() {
     const serial = voucherInput.value.trim().toUpperCase();
     if (!serial) {
       showVoucherStatus('상품권 번호를 입력해주세요.', 'error');
       return;
     }
+    // 중복 등록 방지
+    if (state.vouchers.some(v => v.serial === serial)) {
+      showVoucherStatus(`이미 등록된 상품권입니다: ${serial}`, 'error');
+      return;
+    }
     try {
       const voucher = await api(`/api/vouchers/${encodeURIComponent(serial)}`);
-      state.voucher = voucher;
       if (voucher.status !== 'active' || voucher.balance <= 0) {
         showVoucherStatus(`이미 사용된 상품권입니다.`, 'error');
-        state.voucher = null;
-      } else {
-        showVoucherStatus(
-          `✅ 사용 가능한 상품권입니다. (액면 ${fmt(voucher.amount)} / 잔액 ${fmt(voucher.balance)})`,
-          'success'
-        );
+        return;
       }
+      if (voucher.is_deleted) {
+        showVoucherStatus(`사용할 수 없는 상품권입니다.`, 'error');
+        return;
+      }
+      state.vouchers.push(voucher);
+      voucherInput.value = '';
+      renderVoucherList();
+      showVoucherStatus(
+        `✅ 상품권이 추가되었습니다. (잔액 ${fmt(voucher.balance)}) — 합계 잔액 ${fmt(getTotalBalance())}`,
+        'success'
+      );
     } catch (e) {
-      state.voucher = null;
       showVoucherStatus(`❌ ${e.message}`, 'error');
     }
+  }
+
+  function removeVoucher(serial) {
+    state.vouchers = state.vouchers.filter(v => v.serial !== serial);
+    renderVoucherList();
+    if (state.vouchers.length === 0) {
+      showVoucherStatus('등록된 상품권이 없습니다. 상품권 번호를 입력해 추가해 주세요.', 'info');
+    } else {
+      showVoucherStatus(`상품권을 제거했습니다. 합계 잔액 ${fmt(getTotalBalance())}`, 'info');
+    }
+  }
+
+  function renderVoucherList() {
+    if (state.vouchers.length === 0) {
+      voucherListWrap.classList.add('hidden');
+      voucherListEl.innerHTML = '';
+      voucherTotalBalanceEl.textContent = '0원';
+      return;
+    }
+    voucherListWrap.classList.remove('hidden');
+    voucherListEl.innerHTML = state.vouchers.map((v, i) => `
+      <li class="voucher-item" data-serial="${escapeHtml(v.serial)}">
+        <span class="voucher-order">${i + 1}</span>
+        <span class="voucher-serial-text">${escapeHtml(v.serial)}</span>
+        <span class="voucher-balance-text">잔액 ${fmt(v.balance)}</span>
+        <button type="button" class="voucher-remove-btn" data-serial="${escapeHtml(v.serial)}" aria-label="제거">✕</button>
+      </li>
+    `).join('');
+    voucherTotalBalanceEl.textContent = fmt(getTotalBalance());
+
+    voucherListEl.querySelectorAll('.voucher-remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => removeVoucher(btn.dataset.serial));
+    });
   }
 
   function showVoucherStatus(msg, type) {
@@ -123,9 +174,29 @@
     voucherStatus.className = `voucher-status ${type}`;
   }
 
+  // FIFO 사용 시뮬레이션 (구매 모달에서 미리보기로 표시)
+  function simulateUsage(totalPrice) {
+    const usages = [];
+    let remaining = totalPrice;
+    for (let i = 0; i < state.vouchers.length && remaining > 0; i++) {
+      const v = state.vouchers[i];
+      const take = Math.min(remaining, v.balance);
+      if (take <= 0) continue;
+      usages.push({
+        sequence: usages.length + 1,
+        serial: v.serial,
+        balance_before: v.balance,
+        amount_used: take,
+        balance_after: v.balance - take
+      });
+      remaining -= take;
+    }
+    return { usages, shortfall: remaining };
+  }
+
   // ── 구매 모달 ──
   function openPurchaseModal(productId) {
-    if (!state.voucher) {
+    if (state.vouchers.length === 0) {
       toast('먼저 상품권 번호를 등록해주세요.', 'error');
       voucherInput.focus();
       return;
@@ -171,13 +242,38 @@
     if (!state.selectedProduct) return;
     const qty = Math.max(1, Number(purchaseQuantity.value) || 1);
     const total = state.selectedProduct.price * qty;
+    const totalBalance = getTotalBalance();
     purchaseTotal.textContent = fmt(total);
-    purchaseBalance.textContent = state.voucher ? fmt(state.voucher.balance) : '0원';
-    confirmPurchaseBtn.disabled = !state.voucher || total > state.voucher.balance;
+    purchaseBalance.textContent = fmt(totalBalance);
+
+    const { usages, shortfall } = simulateUsage(total);
+    if (state.vouchers.length > 0 && total > 0) {
+      purchaseUsagePreview.classList.remove('hidden');
+      if (shortfall > 0) {
+        purchaseUsageList.innerHTML = `
+          <li class="usage-shortfall">상품권 잔액이 ${fmt(shortfall)} 부족합니다. 상품권을 추가로 등록해 주세요.</li>
+        `;
+      } else {
+        purchaseUsageList.innerHTML = usages.map(u => `
+          <li>
+            <span class="usage-seq">${u.sequence}.</span>
+            <span class="usage-serial">${escapeHtml(u.serial)}</span>
+            <span class="usage-amount">−${fmt(u.amount_used)}</span>
+            <span class="usage-after">(잔액 ${fmt(u.balance_after)})</span>
+          </li>
+        `).join('');
+      }
+    } else {
+      purchaseUsagePreview.classList.add('hidden');
+      purchaseUsageList.innerHTML = '';
+    }
+
+    confirmPurchaseBtn.disabled =
+      state.vouchers.length === 0 || total <= 0 || total > totalBalance;
   }
 
   async function confirmPurchase() {
-    if (!state.voucher || !state.selectedProduct) return;
+    if (state.vouchers.length === 0 || !state.selectedProduct) return;
     const qty = Math.max(1, Number(purchaseQuantity.value) || 1);
 
     // 배송정보 수집
@@ -206,18 +302,41 @@
       const result = await api('/api/orders', {
         method: 'POST',
         body: JSON.stringify({
-          voucher_serial: state.voucher.serial,
+          voucher_serials: state.vouchers.map(v => v.serial),
           product_id: state.selectedProduct.id,
           quantity: qty,
           ...shipping
         })
       });
-      state.voucher = result.voucher;
-      toast(`🎉 구매 완료! 주문번호 #${result.order.id} (잔액: ${fmt(result.voucher.balance)})`, 'success');
-      showVoucherStatus(
-        `✅ 사용 가능한 상품권입니다. (액면 ${fmt(result.voucher.amount)} / 잔액 ${fmt(result.voucher.balance)})`,
+
+      // 응답 반영: 사용된 상품권만큼 state.vouchers 의 잔액/상태 갱신
+      // (서버가 반환한 updated vouchers 배열을 신뢰)
+      if (Array.isArray(result.vouchers)) {
+        const map = new Map(result.vouchers.map(v => [v.serial, v]));
+        state.vouchers = state.vouchers
+          .map(v => map.get(v.serial) || v)
+          // 잔액이 0이고 사용완료된 상품권은 목록에서 자동 제거
+          .filter(v => !(v.status === 'used' && v.balance <= 0));
+      }
+      renderVoucherList();
+
+      // 사용 내역 요약 토스트
+      const usageSummary = (result.usages || [])
+        .map(u => `${u.voucher_serial} −${fmt(u.amount_used)}`)
+        .join(' · ');
+      toast(
+        `🎉 구매 완료! 주문번호 #${result.order.id}\n${usageSummary} (남은 합계 잔액: ${fmt(getTotalBalance())})`,
         'success'
       );
+
+      if (state.vouchers.length > 0) {
+        showVoucherStatus(
+          `✅ 합계 잔액: ${fmt(getTotalBalance())} (등록된 상품권 ${state.vouchers.length}장)`,
+          'success'
+        );
+      } else {
+        showVoucherStatus('등록된 상품권이 없습니다. 상품권 번호를 입력해 추가해 주세요.', 'info');
+      }
       closePurchaseModal();
       loadProducts();
     } catch (e) {
@@ -228,9 +347,9 @@
   }
 
   // ── 이벤트 ──
-  checkVoucherBtn.addEventListener('click', checkVoucher);
+  checkVoucherBtn.addEventListener('click', addVoucher);
   voucherInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') checkVoucher();
+    if (e.key === 'Enter') addVoucher();
   });
   modalCloseBtn.addEventListener('click', closePurchaseModal);
   purchaseModal.addEventListener('click', (e) => {
@@ -258,16 +377,13 @@
     }
     if (!postcodeLayer || !postcodeEmbed) return;
 
-    // 레이어 표시
     postcodeLayer.classList.remove('hidden');
     postcodeLayer.setAttribute('aria-hidden', 'false');
     postcodeEmbed.innerHTML = '';
 
     new daum.Postcode({
       oncomplete: function (data) {
-        // 도로명 주소가 있으면 우선 사용, 없으면 지번 주소
         let fullAddress = data.roadAddress || data.jibunAddress;
-        // 참고 항목(법정동/건물명)이 있으면 괄호로 추가
         let extra = '';
         if (data.userSelectedType === 'R') {
           if (data.bname && /[동|로|가]$/g.test(data.bname)) extra += data.bname;
@@ -278,13 +394,11 @@
         }
         $('#recipient-zipcode').value = data.zonecode || '';
         $('#recipient-address').value = fullAddress;
-        // 레이어 닫고 상세 주소 입력칸으로 포커스
         closeAddressSearch();
         const detailInput = $('#recipient-address-detail');
         if (detailInput) detailInput.focus();
       },
       onclose: function () {
-        // 사용자가 검색을 닫았을 때 레이어도 함께 닫음
         closeAddressSearch();
       },
       width: '100%',

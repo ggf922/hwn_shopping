@@ -657,12 +657,17 @@
         tbody.innerHTML = '<tr><td colspan="8" class="empty">주문 내역이 없습니다.</td></tr>';
         return;
       }
-      tbody.innerHTML = state.orders.map(o => `
+      tbody.innerHTML = state.orders.map(o => {
+        const usageCount = Array.isArray(o.usages) ? o.usages.length : 0;
+        const voucherCell = usageCount > 1
+          ? `<strong>#${o.id}</strong><br>
+             <span class="serial-code" style="font-size:0.75rem">${o.voucher_serial}</span>
+             <br><span style="font-size:0.72rem;color:var(--gold-dark);font-weight:600">+ 상품권 ${usageCount}장 사용</span>`
+          : `<strong>#${o.id}</strong><br>
+             <span class="serial-code" style="font-size:0.75rem">${o.voucher_serial}</span>`;
+        return `
         <tr class="order-row" data-id="${o.id}" style="cursor:pointer">
-          <td>
-            <strong>#${o.id}</strong><br>
-            <span class="serial-code" style="font-size:0.75rem">${o.voucher_serial}</span>
-          </td>
+          <td>${voucherCell}</td>
           <td>
             ${escapeHtml(o.product_name)} × ${o.quantity}<br>
             <span style="color:var(--gold-dark);font-weight:600">${fmt(o.total_price)}</span>
@@ -678,7 +683,8 @@
           <td>${statusBadge(o.status || 'pending')}</td>
           <td style="font-size:0.85rem">${fmtDate(o.created_at)}</td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
       $$('.order-row').forEach(row => {
         row.addEventListener('click', () => openOrderDetail(Number(row.dataset.id)));
       });
@@ -692,14 +698,30 @@
     if (!o) return;
     const statuses = ['pending', 'preparing', 'shipped', 'delivered', 'cancelled'];
     const currentStatus = o.status || 'pending';
+    // 사용된 상품권 내역 (다중 상품권 결제 지원) — 서버에서 usages 배열로 내려옴
+    const usages = Array.isArray(o.usages) && o.usages.length > 0
+      ? o.usages
+      : [{ voucher_serial: o.voucher_serial, amount_used: o.total_price, sequence: 1 }];
+
+    const usagesHtml = usages.map(u => `
+      <div class="detail-row usage-detail-row">
+        <span>${u.sequence}. 상품권</span>
+        <span class="serial-code">${escapeHtml(u.voucher_serial)}</span>
+        <strong style="color:var(--gold-dark);margin-left:auto">−${fmt(u.amount_used)}</strong>
+      </div>
+    `).join('');
+
     $('#order-detail-body').innerHTML = `
       <div class="detail-section">
         <h4>주문 정보</h4>
         <div class="detail-row"><span>주문번호</span><strong>#${o.id}</strong></div>
-        <div class="detail-row"><span>상품권</span><span class="serial-code">${o.voucher_serial}</span></div>
         <div class="detail-row"><span>제품</span><strong>${escapeHtml(o.product_name)} × ${o.quantity}</strong></div>
         <div class="detail-row"><span>결제금액</span><strong style="color:var(--gold-dark)">${fmt(o.total_price)}</strong></div>
         <div class="detail-row"><span>주문일시</span>${fmtDate(o.created_at)}</div>
+      </div>
+      <div class="detail-section">
+        <h4>🎁 사용된 상품권 ${usages.length > 1 ? `(${usages.length}장)` : ''}</h4>
+        ${usagesHtml}
       </div>
       <div class="detail-section">
         <h4>📦 배송 정보</h4>
