@@ -437,6 +437,61 @@
     });
   }
 
+  // ── 공지 팝업 (배송 일정 안내, 2026-06-08 23:59 까지 노출) ──
+  (function initNoticePopup() {
+    const popup = document.getElementById('notice-popup');
+    if (!popup) return;
+
+    // 노출 종료 시점: 2026년 6월 8일 23:59:59 (KST 기준)
+    // — 이 시점이 지나면 팝업을 띄우지 않음
+    const NOTICE_KEY = 'notice-delivery-202606';
+    const EXPIRE_AT = new Date('2026-06-08T23:59:59+09:00').getTime();
+    const HIDE_TODAY_MS = 24 * 60 * 60 * 1000; // 24시간
+
+    // 노출 기간이 끝났으면 표시하지 않음
+    if (Date.now() > EXPIRE_AT) return;
+
+    // "오늘 하루 보지 않기" 처리 — localStorage 에 만료 시각 저장
+    try {
+      const hideUntil = Number(localStorage.getItem(NOTICE_KEY) || 0);
+      if (hideUntil && Date.now() < hideUntil) return;
+    } catch (_) { /* localStorage 미지원 환경 무시 */ }
+
+    // 팝업 표시
+    popup.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+
+    const closeBtn = document.getElementById('notice-popup-close');
+    const hideTodayInput = document.getElementById('notice-popup-hide-today');
+
+    function closePopup() {
+      // "오늘 하루 보지 않기" 체크 시 만료시각 저장
+      if (hideTodayInput && hideTodayInput.checked) {
+        try {
+          localStorage.setItem(NOTICE_KEY, String(Date.now() + HIDE_TODAY_MS));
+        } catch (_) { /* ignore */ }
+      }
+      popup.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', closePopup);
+
+    // 백드롭 클릭 또는 data-close="1" 요소 클릭 시 닫기
+    popup.addEventListener('click', (e) => {
+      if (e.target && e.target.dataset && e.target.dataset.close === '1') {
+        closePopup();
+      }
+    });
+
+    // ESC 키로 닫기
+    document.addEventListener('keydown', function escHandler(e) {
+      if (e.key === 'Escape' && !popup.classList.contains('hidden')) {
+        closePopup();
+      }
+    });
+  })();
+
   // ── 초기화 ──
   loadProducts();
 })();

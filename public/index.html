@@ -4,11 +4,32 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>하원나라 - 프리미엄 쇼핑몰</title>
-  <link rel="stylesheet" href="/css/style.css?v=14" />
+  <link rel="stylesheet" href="/css/style.css?v=15" />
   <!-- 다음(카카오) 우편번호 검색 API -->
   <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
 <body>
+  <!-- 6월 3일 지방선거 배송 일정 안내 팝업 (6/8까지 자동 표시) -->
+  <div id="notice-popup" class="notice-popup hidden" role="dialog" aria-modal="true" aria-labelledby="notice-popup-title">
+    <div class="notice-popup-backdrop" data-close="1"></div>
+    <div class="notice-popup-content">
+      <button type="button" class="notice-popup-close" id="notice-popup-close" aria-label="닫기">✕</button>
+      <h2 id="notice-popup-title" class="sr-only">6월 3일 지방선거 배송 일정 안내</h2>
+      <img
+        src="/images/delivery-notice-202606.png"
+        alt="6월 3일 지방선거 배송 일정 안내 — 6/1(월) 오후 2시 택배 마감, 6/2(화)·6/3(수)·6/5(금) 배송 불가, 6/4(목) 오후 2시 택배 마감, 6/8(월)부터 순차 배송"
+        class="notice-popup-image"
+      />
+      <div class="notice-popup-footer">
+        <label class="notice-popup-hide-today">
+          <input type="checkbox" id="notice-popup-hide-today" />
+          <span>오늘 하루 보지 않기</span>
+        </label>
+        <button type="button" class="btn btn-primary btn-sm notice-popup-confirm" data-close="1">확인</button>
+      </div>
+    </div>
+  </div>
+
   <header class="site-header">
     <div class="container header-inner">
       <h1 class="logo">하원나라 <span>HAWONNARA</span></h1>
@@ -205,6 +226,6 @@
     </div>
   </footer>
 
-  <script src="/js/shop.js?v=13"></script>
+  <script src="/js/shop.js?v=14"></script>
 </body>
 </html>
