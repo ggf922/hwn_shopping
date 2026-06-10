@@ -598,6 +598,9 @@ app.get('/api/orders', auth.requireAdmin, (req, res) => {
 });
 
 // 주문 상태 변경 (관리자)
+// — 'cancelled' 로 전환 시: 사용된 상품권 잔액 복원 + 제품 재고 복원
+// — 'cancelled' → 다른 상태로 재전환 시: 다시 차감 + 재고 차감
+//   (단, 잔액이 부족하거나 재고가 부족하면 거부)
 app.put('/api/orders/:id/status', auth.requireAdmin, (req, res) => {
   try {
     const { status } = req.body;
@@ -605,11 +608,115 @@ app.put('/api/orders/:id/status', auth.requireAdmin, (req, res) => {
     if (!allowed.includes(status)) {
       return res.status(400).json({ success: false, error: '유효하지 않은 상태입니다.' });
     }
-    const result = db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, req.params.id);
-    if (result.changes === 0) return res.status(404).json({ success: false, error: '주문을 찾을 수 없습니다.' });
-    const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
-    res.json({ success: true, data: updated });
+
+    const orderId = Number(req.params.id);
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+    if (!order) return res.status(404).json({ success: false, error: '주문을 찾을 수 없습니다.' });
+
+    const prevStatus = order.status || 'pending';
+    if (prevStatus === status) {
+      // 동일 상태로의 변경은 잔액·재고를 건드리지 않음
+      return res.json({ success: true, data: order, restored: false });
+    }
+
+    const usages = db.prepare(
+      'SELECT voucher_serial, amount_used, sequence FROM order_voucher_usages WHERE order_id = ? ORDER BY sequence ASC'
+    ).all(orderId);
+
+    // 백워드 호환: order_voucher_usages 가 비어있는 옛 주문은
+    // orders.voucher_serial 한 장으로 total_price 전액 결제된 것으로 간주
+    const effectiveUsages = usages.length > 0
+      ? usages
+      : [{ voucher_serial: order.voucher_serial, amount_used: order.total_price, sequence: 1 }];
+
+    // ── CASE 1: 취소로 전환 (active → cancelled) — 잔액·재고 복원 ──
+    if (prevStatus !== 'cancelled' && status === 'cancelled') {
+      const tx = db.transaction(() => {
+        for (const u of effectiveUsages) {
+          const v = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(u.voucher_serial);
+          if (!v) continue; // 상품권이 (소프트 삭제 외) 어떤 이유로 사라진 경우는 건너뜀
+          const newBalance = v.balance + u.amount_used;
+          // 잔액이 0보다 커지면 다시 사용 가능 상태로 복귀
+          const newStatus = newBalance > 0 ? 'active' : v.status;
+          // used_at 은 잔액이 양수로 돌아오면 초기화
+          const newUsedAt = newBalance > 0 ? null : v.used_at;
+          db.prepare(
+            'UPDATE vouchers SET balance = ?, status = ?, used_at = ? WHERE serial = ?'
+          ).run(newBalance, newStatus, newUsedAt, u.voucher_serial);
+        }
+        // 제품 재고 복원 (제품이 소프트 삭제되었더라도 stock 환원은 수행)
+        db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?').run(order.quantity, order.product_id);
+        db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, orderId);
+      });
+      tx();
+
+      const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+      const restoredVouchers = effectiveUsages.map(u => ({
+        serial: u.voucher_serial,
+        amount_restored: u.amount_used,
+        voucher: db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(u.voucher_serial)
+      }));
+      return res.json({
+        success: true,
+        data: updated,
+        restored: true,
+        restored_vouchers: restoredVouchers,
+        restored_stock: order.quantity
+      });
+    }
+
+    // ── CASE 2: 취소 상태에서 다시 활성 상태로 전환 — 재차감 ──
+    if (prevStatus === 'cancelled' && status !== 'cancelled') {
+      // 사전 검증: 모든 상품권이 차감 가능한지 확인 (현재 잔액 + 다른 주문의 사용분 무관)
+      for (const u of effectiveUsages) {
+        const v = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(u.voucher_serial);
+        if (!v) {
+          return res.status(400).json({
+            success: false,
+            error: `복원 불가: 상품권을 찾을 수 없습니다 (${u.voucher_serial}).`
+          });
+        }
+        if (v.balance < u.amount_used) {
+          return res.status(400).json({
+            success: false,
+            error: `복원 불가: 상품권 ${u.voucher_serial} 잔액(${v.balance.toLocaleString()}원)이 부족하여 ${u.amount_used.toLocaleString()}원을 다시 차감할 수 없습니다.`
+          });
+        }
+      }
+      // 사전 검증: 재고
+      const product = db.prepare('SELECT * FROM products WHERE id = ?').get(order.product_id);
+      if (!product || product.stock < order.quantity) {
+        return res.status(400).json({
+          success: false,
+          error: `복원 불가: 제품 재고가 부족합니다. (필요 ${order.quantity}개, 현재 ${product ? product.stock : 0}개)`
+        });
+      }
+
+      const tx = db.transaction(() => {
+        for (const u of effectiveUsages) {
+          const v = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(u.voucher_serial);
+          const newBalance = v.balance - u.amount_used;
+          const newStatus = newBalance === 0 ? 'used' : 'active';
+          const newUsedAt = newBalance === 0 ? new Date().toISOString() : v.used_at;
+          db.prepare(
+            'UPDATE vouchers SET balance = ?, status = ?, used_at = ? WHERE serial = ?'
+          ).run(newBalance, newStatus, newUsedAt, u.voucher_serial);
+        }
+        db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(order.quantity, order.product_id);
+        db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, orderId);
+      });
+      tx();
+
+      const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+      return res.json({ success: true, data: updated, restored: false, rededucted: true });
+    }
+
+    // ── CASE 3: 그 외 — 단순 상태 변경 (active 상태들 사이의 전환) ──
+    db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, orderId);
+    const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+    res.json({ success: true, data: updated, restored: false });
   } catch (e) {
+    console.error('주문 상태 변경 오류:', e);
     res.status(500).json({ success: false, error: e.message });
   }
 });

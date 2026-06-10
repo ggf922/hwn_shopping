@@ -743,9 +743,55 @@
     $('#save-order-status').addEventListener('click', async (e) => {
       const id = e.target.dataset.id;
       const status = $('#order-status-select').value;
+      const prevStatus = o.status || 'pending';
+
+      // 취소 전환 시 사용자 재확인 (잔액·재고가 복원됨)
+      if (prevStatus !== 'cancelled' && status === 'cancelled') {
+        const ok = confirm(
+          '주문을 취소하시겠습니까?\n\n' +
+          '⚠️ 취소 시 다음이 자동 처리됩니다:\n' +
+          '  • 결제에 사용된 모든 상품권의 금액이 복원됩니다.\n' +
+          '  • 차감된 제품 재고가 복원됩니다.'
+        );
+        if (!ok) return;
+      }
+      // 취소 해제(다른 상태로 되돌리기) 시 재차감 안내
+      if (prevStatus === 'cancelled' && status !== 'cancelled') {
+        const ok = confirm(
+          '취소된 주문을 다시 활성화하시겠습니까?\n\n' +
+          '⚠️ 복원되었던 상품권 금액과 제품 재고가 다시 차감됩니다.\n' +
+          '(잔액 또는 재고가 부족하면 거부될 수 있습니다.)'
+        );
+        if (!ok) return;
+      }
+
       try {
-        await api(`/api/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
-        toast('✅ 주문 상태가 변경되었습니다.', 'success');
+        // raw 응답을 받기 위해 fetch 직접 호출 (복원 정보 메시지에 활용)
+        const token = getToken();
+        const res = await fetch(`/api/orders/${id}/status`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: 'Bearer ' + token } : {})
+          },
+          body: JSON.stringify({ status })
+        });
+        const body = await res.json();
+        if (!body.success) throw new Error(body.error || '요청 실패');
+
+        if (body.restored && Array.isArray(body.restored_vouchers)) {
+          const summary = body.restored_vouchers
+            .map(rv => `${rv.serial} +${fmt(rv.amount_restored)}`)
+            .join(' · ');
+          toast(
+            `✅ 주문이 취소되었습니다.\n상품권 금액 복원: ${summary}\n재고 복원: ${body.restored_stock}개`,
+            'success'
+          );
+        } else if (body.rededucted) {
+          toast('✅ 주문이 다시 활성화되었습니다. (상품권·재고 재차감 완료)', 'success');
+        } else {
+          toast('✅ 주문 상태가 변경되었습니다.', 'success');
+        }
         closeOrderDetail();
         loadOrders();
       } catch (err) {
