@@ -275,8 +275,87 @@ app.delete('/api/products/:id', auth.requireAdmin, (req, res) => {
 // 상품권 (Vouchers) API
 // ─────────────────────────────────────────────
 
-// 발권 가능 금액
-const VALID_AMOUNTS = [10000, 30000, 50000, 70000, 144000, 500000];
+// 발권 가능 금액 (DB의 voucher_amounts 테이블에서 동적 조회)
+function getValidAmounts() {
+  return db.prepare(
+    'SELECT amount FROM voucher_amounts WHERE is_active = 1 ORDER BY sort_order ASC, amount ASC'
+  ).all().map(r => r.amount);
+}
+
+// ─────────────────────────────────────────────
+// 발권 금액 관리 API
+// ─────────────────────────────────────────────
+
+// 발권 금액 목록 조회 (공개 — 쇼핑몰/관리자 페이지 모두 사용)
+app.get('/api/voucher-amounts', (req, res) => {
+  try {
+    const rows = db.prepare(
+      'SELECT id, amount, sort_order, is_active FROM voucher_amounts WHERE is_active = 1 ORDER BY sort_order ASC, amount ASC'
+    ).all();
+    res.json({ success: true, data: rows });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 발권 금액 추가 (관리자)
+app.post('/api/voucher-amounts', auth.requireAdmin, (req, res) => {
+  try {
+    const amount = Number(req.body.amount);
+    if (!Number.isInteger(amount) || amount < 1000 || amount > 100000000) {
+      return res.status(400).json({
+        success: false,
+        error: '금액은 1,000원 이상 1억원 이하의 정수여야 합니다.'
+      });
+    }
+    // 중복 체크 (활성/비활성 무관 — UNIQUE 제약)
+    const existing = db.prepare('SELECT id, is_active FROM voucher_amounts WHERE amount = ?').get(amount);
+    if (existing) {
+      if (existing.is_active === 1) {
+        return res.status(400).json({ success: false, error: '이미 등록된 금액입니다.' });
+      }
+      // 비활성 → 다시 활성화
+      db.prepare('UPDATE voucher_amounts SET is_active = 1 WHERE id = ?').run(existing.id);
+      const row = db.prepare('SELECT id, amount, sort_order, is_active FROM voucher_amounts WHERE id = ?').get(existing.id);
+      return res.status(201).json({ success: true, data: row });
+    }
+    // 새 sort_order = 현재 최대값 + 1
+    const maxRow = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM voucher_amounts').get();
+    const sortOrder = (maxRow.m || 0) + 1;
+    const result = db.prepare(
+      'INSERT INTO voucher_amounts (amount, sort_order, is_active) VALUES (?, ?, 1)'
+    ).run(amount, sortOrder);
+    const row = db.prepare('SELECT id, amount, sort_order, is_active FROM voucher_amounts WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json({ success: true, data: row });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 발권 금액 삭제 (관리자)
+// — 이미 발권된 상품권이 있는 금액은 비활성화(soft) 처리, 없으면 하드 삭제
+app.delete('/api/voucher-amounts/:id', auth.requireAdmin, (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const row = db.prepare('SELECT * FROM voucher_amounts WHERE id = ?').get(id);
+    if (!row) return res.status(404).json({ success: false, error: '해당 금액을 찾을 수 없습니다.' });
+
+    const usedCount = db.prepare('SELECT COUNT(*) AS c FROM vouchers WHERE amount = ?').get(row.amount).c;
+    if (usedCount > 0) {
+      // 발권 이력 존재 → 비활성화만 (이력 보존)
+      db.prepare('UPDATE voucher_amounts SET is_active = 0 WHERE id = ?').run(id);
+      return res.json({
+        success: true,
+        mode: 'soft',
+        message: `해당 금액으로 발권된 상품권이 ${usedCount}장 존재하여 비활성화되었습니다. (목록에서는 숨김 처리)`
+      });
+    }
+    db.prepare('DELETE FROM voucher_amounts WHERE id = ?').run(id);
+    res.json({ success: true, mode: 'hard', message: '금액이 삭제되었습니다.' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
 
 // 상품권 목록 (관리자)
 app.get('/api/vouchers', auth.requireAdmin, (req, res) => {
@@ -308,10 +387,11 @@ app.get('/api/vouchers/:serial', (req, res) => {
 app.post('/api/vouchers', auth.requireAdmin, (req, res) => {
   try {
     const { amount, quantity = 1 } = req.body;
-    if (!VALID_AMOUNTS.includes(Number(amount))) {
+    const validAmounts = getValidAmounts();
+    if (!validAmounts.includes(Number(amount))) {
       return res.status(400).json({
         success: false,
-        error: `발권 가능 금액: ${VALID_AMOUNTS.map(a => a.toLocaleString() + '원').join(', ')}`
+        error: `발권 가능 금액: ${validAmounts.map(a => a.toLocaleString() + '원').join(', ')}`
       });
     }
     const qty = Math.min(Math.max(Number(quantity) || 1, 1), 100);

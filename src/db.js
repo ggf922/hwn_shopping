@@ -66,7 +66,34 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_order_voucher_usages_order_id ON order_voucher_usages(order_id);
   CREATE INDEX IF NOT EXISTS idx_order_voucher_usages_voucher_serial ON order_voucher_usages(voucher_serial);
+
+  -- 발권 가능 금액 목록 (관리자가 동적으로 추가/삭제 가능)
+  CREATE TABLE IF NOT EXISTS voucher_amounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount INTEGER UNIQUE NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
+
+// 발권 금액 초기 시드 (테이블이 비어있을 때만)
+(() => {
+  try {
+    const cnt = db.prepare('SELECT COUNT(*) AS c FROM voucher_amounts').get().c;
+    if (cnt === 0) {
+      const defaults = [10000, 30000, 50000, 70000, 100000, 140000, 144000, 200000, 300000, 500000, 1000000];
+      const insert = db.prepare('INSERT INTO voucher_amounts (amount, sort_order, is_active) VALUES (?, ?, 1)');
+      const tx = db.transaction(() => {
+        defaults.forEach((amt, idx) => insert.run(amt, idx + 1));
+      });
+      tx();
+      console.log(`[DB] 발권 금액 초기 시드 ${defaults.length}건 삽입`);
+    }
+  } catch (e) {
+    console.error('[DB] voucher_amounts 초기 시드 실패:', e.message);
+  }
+})();
 
 // 마이그레이션: 기존 orders 테이블에 배송정보 컬럼이 없으면 추가
 function addColumnIfMissing(table, column, definition) {

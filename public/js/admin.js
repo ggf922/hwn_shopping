@@ -4,15 +4,13 @@
 (() => {
   'use strict';
 
-  // ── 상수 ──
-  const VOUCHER_AMOUNTS = [10000, 30000, 50000, 70000, 144000, 500000];
-
   // ── 상태 ──
   const state = {
     selectedAmount: null,
     products: [],
     vouchers: [],
-    orders: []
+    orders: [],
+    voucherAmounts: []  // [{id, amount, sort_order, is_active}]
   };
 
   // ── DOM 헬퍼 ──
@@ -270,9 +268,37 @@
   // ─────────────────────────────────────────
   // 상품권 발권
   // ─────────────────────────────────────────
+  async function loadVoucherAmounts() {
+    // /api/voucher-amounts 는 공개 엔드포인트지만 일관성을 위해 raw fetch
+    try {
+      const token = getToken();
+      const res = await fetch('/api/voucher-amounts', {
+        headers: token ? { Authorization: 'Bearer ' + token } : {}
+      });
+      const body = await res.json();
+      if (body.success) {
+        state.voucherAmounts = body.data || [];
+      } else {
+        state.voucherAmounts = [];
+      }
+    } catch (e) {
+      state.voucherAmounts = [];
+    }
+  }
+
   function renderAmountButtons() {
-    $('#amount-buttons').innerHTML = VOUCHER_AMOUNTS.map(a => `
-      <button class="amount-btn" data-amount="${a}">${fmt(a)}</button>
+    const amounts = state.voucherAmounts.map(r => r.amount);
+    if (amounts.length === 0) {
+      $('#amount-buttons').innerHTML = '<p style="color:#999;grid-column:1/-1;text-align:center;padding:20px">등록된 발권 금액이 없습니다. 아래 "발권 금액 관리"에서 추가해주세요.</p>';
+      return;
+    }
+    // 현재 선택값이 새 목록에 없으면 초기화
+    if (state.selectedAmount && !amounts.includes(state.selectedAmount)) {
+      state.selectedAmount = null;
+      $('#issue-btn').disabled = true;
+    }
+    $('#amount-buttons').innerHTML = amounts.map(a => `
+      <button class="amount-btn ${a === state.selectedAmount ? 'selected' : ''}" data-amount="${a}">${fmt(a)}</button>
     `).join('');
     $$('.amount-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -283,7 +309,118 @@
       });
     });
   }
-  renderAmountButtons();
+
+  function renderAmountMgmtList() {
+    const container = $('#amount-mgmt-list');
+    if (!container) return;
+    if (state.voucherAmounts.length === 0) {
+      container.innerHTML = '<p style="color:#999;text-align:center;padding:12px">등록된 금액이 없습니다.</p>';
+      return;
+    }
+    container.innerHTML = `
+      <table class="data-table" style="margin-top:0">
+        <thead>
+          <tr>
+            <th style="width:60px;text-align:center">#</th>
+            <th>금액</th>
+            <th style="width:120px;text-align:center">작업</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.voucherAmounts.map((r, idx) => `
+            <tr>
+              <td style="text-align:center">${idx + 1}</td>
+              <td><strong>${fmt(r.amount)}</strong></td>
+              <td style="text-align:center">
+                <button type="button" class="btn btn-danger btn-sm amount-delete-btn" data-id="${r.id}" data-amount="${r.amount}">🗑 삭제</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+    container.querySelectorAll('.amount-delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => deleteVoucherAmount(btn.dataset.id, Number(btn.dataset.amount)));
+    });
+  }
+
+  async function refreshAmounts() {
+    await loadVoucherAmounts();
+    renderAmountButtons();
+    renderAmountMgmtList();
+  }
+
+  async function addVoucherAmount() {
+    const input = $('#new-amount-input');
+    const amount = Number(input.value);
+    if (!Number.isInteger(amount) || amount < 1000) {
+      toast('금액은 1,000원 이상의 정수여야 합니다.', 'error');
+      return;
+    }
+    if (amount > 100000000) {
+      toast('금액은 1억원 이하여야 합니다.', 'error');
+      return;
+    }
+    const btn = $('#add-amount-btn');
+    btn.disabled = true;
+    try {
+      const token = getToken();
+      const res = await fetch('/api/voucher-amounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ amount })
+      });
+      const body = await res.json();
+      if (!body.success) throw new Error(body.error || '추가 실패');
+      input.value = '';
+      toast(`✅ ${fmt(amount)} 금액이 추가되었습니다.`, 'success');
+      await refreshAmounts();
+    } catch (e) {
+      toast(`❌ ${e.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function deleteVoucherAmount(id, amount) {
+    if (!confirm(`${fmt(amount)} 금액을 삭제하시겠습니까?\n\n※ 이미 발권된 상품권이 있을 경우 비활성화(목록에서 숨김) 처리됩니다.`)) return;
+    try {
+      const token = getToken();
+      const res = await fetch(`/api/voucher-amounts/${id}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: 'Bearer ' + token } : {}
+      });
+      const body = await res.json();
+      if (!body.success) throw new Error(body.error || '삭제 실패');
+      const msg = body.mode === 'soft'
+        ? `⚠️ ${body.message}`
+        : `✅ ${fmt(amount)} 금액이 삭제되었습니다.`;
+      toast(msg, body.mode === 'soft' ? 'info' : 'success');
+      await refreshAmounts();
+    } catch (e) {
+      toast(`❌ ${e.message}`, 'error');
+    }
+  }
+
+  // 초기 로드 + 이벤트 바인딩
+  refreshAmounts();
+
+  const toggleBtn = $('#toggle-amount-mgmt');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const body = $('#amount-mgmt-body');
+      const isHidden = body.classList.toggle('hidden');
+      toggleBtn.textContent = isHidden ? '펼치기 ▾' : '접기 ▴';
+    });
+  }
+  const addBtn = $('#add-amount-btn');
+  if (addBtn) addBtn.addEventListener('click', addVoucherAmount);
+  const newAmountInput = $('#new-amount-input');
+  if (newAmountInput) {
+    newAmountInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addVoucherAmount(); }
+    });
+  }
 
   async function issueVouchers() {
     if (!state.selectedAmount) {
