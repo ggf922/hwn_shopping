@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>하원나라 - 프리미엄 쇼핑몰</title>
-  <link rel="stylesheet" href="/css/style.css?v=16" />
+  <link rel="stylesheet" href="/css/style.css?v=17" />
   <!-- 다음(카카오) 우편번호 검색 API -->
   <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
@@ -47,12 +47,17 @@
         (예: 47,500원 결제 시 ①사용하다 남은 상품권 → ②③④ 10,000원 상품권 순으로 차감)
       </p>
       <div class="voucher-input">
-        <input
-          type="text"
-          id="voucher-serial-input"
-          placeholder="상품권 번호 입력 (예: HWN-2026-AF93875)"
-          autocomplete="off"
-        />
+        <div class="voucher-input-group">
+          <span class="voucher-prefix" id="voucher-prefix">HWN-2026-</span>
+          <input
+            type="text"
+            id="voucher-serial-input"
+            placeholder="예: AF93875"
+            autocomplete="off"
+            maxlength="20"
+            inputmode="latin"
+          />
+        </div>
         <button id="check-voucher-btn" class="btn btn-primary">＋ 추가</button>
       </div>
       <div id="voucher-status" class="voucher-status hidden"></div>
@@ -205,6 +210,6 @@
     </div>
   </footer>
 
-  <script src="/js/shop.js?v=15"></script>
+  <script src="/js/shop.js?v=16"></script>
 </body>
 </html>

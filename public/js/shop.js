@@ -103,10 +103,33 @@
     return state.vouchers.reduce((sum, v) => sum + (v.balance || 0), 0);
   }
 
+  // 상품권 시리얼 정규화
+  // - 사용자가 뒷부분(예: "CU88538")만 입력 → "HWN-2026-CU88538"로 자동 보정
+  // - 사용자가 전체("HWN-2026-CU88538") 입력 → 그대로 사용
+  // - 소문자/공백/하이픈 누락 등도 관용적으로 처리
+  function normalizeSerial(raw) {
+    const VOUCHER_PREFIX = 'HWN-2026-';
+    if (!raw) return '';
+    // 공백 제거 + 대문자화
+    let s = String(raw).replace(/\s+/g, '').toUpperCase();
+    // 이미 풀 시리얼이면 그대로
+    if (s.startsWith(VOUCHER_PREFIX)) return s;
+    // "HWN2026CU88538" 처럼 하이픈만 빠진 경우 보정
+    const noHyphen = s.replace(/-/g, '');
+    if (noHyphen.startsWith('HWN2026') && noHyphen.length >= 7) {
+      const suffix = noHyphen.slice(7); // "HWN2026" 이후
+      return VOUCHER_PREFIX + suffix;
+    }
+    // 그 외(접미사만 입력) → prefix 결합
+    // 사용자가 실수로 "-CU88538" 같이 입력한 경우 앞 하이픈 제거
+    s = s.replace(/^-+/, '');
+    return VOUCHER_PREFIX + s;
+  }
+
   async function addVoucher() {
-    const serial = voucherInput.value.trim().toUpperCase();
-    if (!serial) {
-      showVoucherStatus('상품권 번호를 입력해주세요.', 'error');
+    const serial = normalizeSerial(voucherInput.value);
+    if (!serial || serial === 'HWN-2026-') {
+      showVoucherStatus('상품권 번호를 입력해주세요. (예: AF93875)', 'error');
       return;
     }
     // 중복 등록 방지
@@ -350,6 +373,24 @@
   checkVoucherBtn.addEventListener('click', addVoucher);
   voucherInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') addVoucher();
+  });
+  // 사용자가 전체 시리얼("HWN-2026-CU88538")을 붙여넣어도
+  // prefix 부분은 자동 제거하여 뒷부분만 입력란에 남도록 함
+  voucherInput.addEventListener('input', (e) => {
+    const val = e.target.value;
+    const upper = val.toUpperCase();
+    // 전체 시리얼이 입력된 경우 prefix 제거
+    if (upper.startsWith('HWN-2026-')) {
+      e.target.value = upper.slice('HWN-2026-'.length);
+    } else if (upper.replace(/-/g, '').startsWith('HWN2026') && upper.replace(/-/g, '').length > 7) {
+      // 하이픈이 일부 빠진 경우도 처리
+      e.target.value = upper.replace(/-/g, '').slice(7);
+    } else if (val !== upper) {
+      // 단순히 소문자 → 대문자 변환 (커서 위치 유지)
+      const pos = e.target.selectionStart;
+      e.target.value = upper;
+      try { e.target.setSelectionRange(pos, pos); } catch (_) {}
+    }
   });
   modalCloseBtn.addEventListener('click', closePurchaseModal);
   purchaseModal.addEventListener('click', (e) => {

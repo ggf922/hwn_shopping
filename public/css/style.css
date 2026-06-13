@@ -154,18 +154,50 @@ button { cursor: pointer; font-family: inherit; }
 
 /* ── 상품권 입력 영역 ── */
 .voucher-input { display: flex; gap: 10px; margin-top: 16px; }
+.voucher-input-group {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 8px;
+  background: var(--white);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.voucher-input-group:focus-within {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(218, 165, 32, 0.12);
+}
+.voucher-prefix {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  background: #faf6ec;
+  color: #8a7a4a;
+  font-family: 'Courier New', monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border-right: 1.5px solid var(--gray-200);
+  user-select: none;
+  white-space: nowrap;
+}
 .voucher-input input {
   flex: 1;
   padding: 12px 14px;
-  border: 1.5px solid var(--gray-200);
-  border-radius: 8px;
+  border: none;
+  outline: none;
+  background: transparent;
   font-size: 1rem;
   letter-spacing: 1px;
   font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  min-width: 0;
 }
-.voucher-input input:focus {
-  outline: none;
-  border-color: var(--gold);
+.voucher-input input::placeholder {
+  text-transform: none;
+  color: #b8b8b8;
+  font-weight: 400;
 }
 .voucher-status {
   margin-top: 16px;
