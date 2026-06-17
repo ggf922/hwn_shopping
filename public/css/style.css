@@ -171,25 +171,29 @@ button { cursor: pointer; font-family: inherit; }
 .voucher-prefix {
   display: inline-flex;
   align-items: center;
-  padding: 0 14px;
+  padding: 0 10px;
   background: #faf6ec;
   color: #8a7a4a;
   font-family: 'Courier New', monospace;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 700;
-  letter-spacing: 1px;
+  letter-spacing: 0;
   border-right: 1.5px solid var(--gray-200);
   user-select: none;
   white-space: nowrap;
+  /* 입력란이 충분한 공간을 확보할 수 있도록 prefix는 줄어들 수 있도록 함 */
+  flex: 0 0 auto;
+  cursor: text;
 }
 .voucher-input input {
-  flex: 1;
-  padding: 12px 14px;
+  flex: 1 1 0;
+  width: 0; /* flex item이 부모 안에서 줄어들 수 있도록 */
+  padding: 12px 12px;
   border: none;
   outline: none;
   background: transparent;
   font-size: 1rem;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   font-family: 'Courier New', monospace;
   text-transform: uppercase;
   min-width: 0;
@@ -198,6 +202,43 @@ button { cursor: pointer; font-family: inherit; }
   text-transform: none;
   color: #b8b8b8;
   font-weight: 400;
+}
+
+/* 모바일에서 prefix가 공간을 너무 차지해 시리얼 입력란이 거의 안 보이는 문제 해결 */
+@media (max-width: 600px) {
+  .voucher-input { gap: 6px; }
+  .voucher-prefix {
+    padding: 0 8px;
+    font-size: 0.82rem;
+  }
+  .voucher-input input {
+    padding: 12px 10px;
+    font-size: 0.95rem;
+  }
+  /* "+ 추가" 버튼도 좁은 화면에서는 컴팩트하게 */
+  .voucher-input .btn {
+    padding-left: 12px;
+    padding-right: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+/* 매우 좁은 화면(380px 이하 — 갤럭시 폴드/구형 갤럭시 등)에서 추가 보정 */
+@media (max-width: 380px) {
+  .voucher-prefix {
+    padding: 0 6px;
+    font-size: 0.75rem;
+  }
+  .voucher-input input {
+    padding: 12px 6px;
+    font-size: 0.9rem;
+  }
+  .voucher-input .btn {
+    padding-left: 10px;
+    padding-right: 10px;
+    font-size: 0.9rem;
+  }
 }
 .voucher-status {
   margin-top: 16px;
