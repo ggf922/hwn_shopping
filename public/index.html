@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>하원나라 - 프리미엄 쇼핑몰</title>
-  <link rel="stylesheet" href="/css/style.css?v=19" />
+  <link rel="stylesheet" href="/css/style.css?v=20" />
   <!-- 다음(카카오) 우편번호 검색 API -->
   <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
@@ -70,6 +70,43 @@
         </div>
         <ul id="voucher-list" class="voucher-list"></ul>
       </div>
+    </section>
+
+    <!-- 주문 내역 확인 (비회원 조회) -->
+    <section class="order-lookup-section card">
+      <h3>📋 주문 내역 확인</h3>
+      <p class="voucher-hint">
+        받는 분 성함을 입력하시면 주문 내역을 확인하실 수 있습니다.
+        본인 확인을 위해 휴대폰 번호 뒷 4자리를 함께 입력하시면
+        주소·연락처가 그대로 표시됩니다. (선택)
+      </p>
+      <div class="order-lookup-form">
+        <div class="lookup-row">
+          <label for="lookup-name">받는 분 성함 <span class="req">*</span></label>
+          <input
+            type="text"
+            id="lookup-name"
+            placeholder="홍길동"
+            autocomplete="off"
+            maxlength="50"
+          />
+        </div>
+        <div class="lookup-row">
+          <label for="lookup-phone4">휴대폰 뒷 4자리 <small>(선택)</small></label>
+          <input
+            type="tel"
+            id="lookup-phone4"
+            placeholder="5678"
+            autocomplete="off"
+            inputmode="numeric"
+            maxlength="4"
+            pattern="[0-9]{4}"
+          />
+        </div>
+        <button id="lookup-order-btn" class="btn btn-primary">🔍 조회하기</button>
+      </div>
+      <div id="lookup-status" class="lookup-status hidden"></div>
+      <div id="lookup-result" class="lookup-result hidden"></div>
     </section>
 
     <!-- 제품 목록 -->
@@ -210,6 +247,6 @@
     </div>
   </footer>
 
-  <script src="/js/shop.js?v=16"></script>
+  <script src="/js/shop.js?v=17"></script>
 </body>
 </html>

@@ -383,6 +383,121 @@ app.get('/api/orders', auth.requireAdmin, ah(async (req, res) => {
   res.json({ success: true, data: rows });
 }));
 
+// ─────────────────────────────────────────────
+// 주문 내역 조회 (공개, 비회원용 비회원 주문조회)
+//
+// 보안 / 개인정보 정책
+//   - 이름만 입력해도 조회 가능 (사용자 요구사항)
+//   - 단, 이름만으로는 동명이인 가능성 + 개인정보 노출 위험 → 응답을 마스킹
+//   - 이름 + 휴대폰 뒷 4자리 모두 일치하는 경우에만 마스킹 해제 (본인 확인)
+//   - 이름은 완전 일치 (양옆 공백만 trim) — 부분 일치는 의도적으로 차단 (남의 주문 스캐닝 방지)
+//   - 결과는 최대 20건, created_at DESC
+//
+// Query params
+//   name     (required) — 받는 분 이름 (정확히 일치)
+//   phone4   (optional) — 휴대폰 번호 마지막 4자리 (정확히 일치 시 마스킹 해제)
+// ─────────────────────────────────────────────
+app.get('/api/orders/lookup', ah(async (req, res) => {
+  const name = String(req.query.name || '').trim();
+  const phone4Raw = String(req.query.phone4 || '').trim();
+
+  if (!name) {
+    return res.status(400).json({ success: false, error: '받는 분 이름을 입력해주세요.' });
+  }
+  if (name.length > 50) {
+    return res.status(400).json({ success: false, error: '이름이 너무 깁니다.' });
+  }
+
+  // phone4 는 숫자 4자리만 허용 (옵션)
+  let phone4 = null;
+  if (phone4Raw) {
+    if (!/^\d{4}$/.test(phone4Raw)) {
+      return res.status(400).json({ success: false, error: '휴대폰 뒷 4자리는 숫자 4자리로 입력해주세요.' });
+    }
+    phone4 = phone4Raw;
+  }
+
+  // 전체 주문에서 이름 정확 일치 필터 (어댑터 무관하게 동작하도록 메모리 필터링)
+  // — 데이터셋이 크지 않은 도메인이므로 성능 문제 없음. 큰 규모면 어댑터에 lookup 메서드 추가 권장.
+  const all = await db.orders.list();
+  let matched = all.filter(o => (o.recipient_name || '').trim() === name);
+
+  // 본인 확인 여부 판단 (이름 + phone4 모두 일치)
+  // 각 주문별로 개별 검사 (같은 이름이라도 다른 사람일 수 있음)
+  const out = matched.slice(0, 20).map(o => {
+    const phone = String(o.recipient_phone || '');
+    const phoneDigits = phone.replace(/\D/g, '');
+    const last4 = phoneDigits.slice(-4);
+    const verified = phone4 && last4 && last4 === phone4;
+
+    if (verified) {
+      // 본인 확인됨 → 그대로 반환 (단 voucher_serial 등 민감 정보 제외)
+      return {
+        id: o.id,
+        created_at: o.created_at,
+        product_name: o.product_name,
+        quantity: o.quantity,
+        total_price: o.total_price,
+        status: o.status || 'pending',
+        recipient_name: o.recipient_name,
+        recipient_phone: o.recipient_phone,
+        recipient_zipcode: o.recipient_zipcode,
+        recipient_address: o.recipient_address,
+        recipient_address_detail: o.recipient_address_detail,
+        delivery_memo: o.delivery_memo,
+        verified: true,
+      };
+    }
+
+    // 마스킹 모드: 이름만 일치하는 익명 조회
+    return {
+      id: o.id,
+      created_at: o.created_at,
+      product_name: o.product_name,
+      quantity: o.quantity,
+      total_price: o.total_price,
+      status: o.status || 'pending',
+      recipient_name: o.recipient_name,
+      recipient_phone: maskPhone(o.recipient_phone),
+      recipient_zipcode: o.recipient_zipcode ? '*****' : '',
+      recipient_address: maskAddress(o.recipient_address),
+      recipient_address_detail: o.recipient_address_detail ? '***' : '',
+      delivery_memo: '', // 메모는 항상 숨김 (개인적인 내용일 수 있음)
+      verified: false,
+    };
+  });
+
+  res.json({
+    success: true,
+    data: out,
+    meta: {
+      count: out.length,
+      verified: !!phone4 && out.some(x => x.verified),
+      total_matches: matched.length, // 같은 이름의 주문이 몇 건 있는지 (사용자가 본인 주문 식별에 도움)
+    },
+  });
+}));
+
+// 보조: 전화번호 마스킹 — "010-1234-5678" → "010-****-5678"
+function maskPhone(phone) {
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length < 4) return '****';
+  const last4 = digits.slice(-4);
+  if (digits.length <= 7) return `***-${last4}`;
+  const prefix = digits.slice(0, 3);
+  return `${prefix}-****-${last4}`;
+}
+
+// 보조: 주소 마스킹 — 시/도 + 시/군/구 만 노출, 그 뒤는 별표
+//   예) "서울특별시 강남구 선릉로93길 10" → "서울특별시 강남구 ***"
+function maskAddress(addr) {
+  if (!addr) return '';
+  const parts = String(addr).trim().split(/\s+/);
+  if (parts.length <= 2) return parts.join(' ');
+  return parts.slice(0, 2).join(' ') + ' ***';
+}
+
 // 주문 상태 변경 (관리자)
 app.put('/api/orders/:id/status', auth.requireAdmin, ah(async (req, res) => {
   const { status } = req.body;
