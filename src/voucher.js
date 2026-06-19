@@ -7,8 +7,11 @@ const fs = require('fs');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', 'public', 'images', 'voucher-template.png');
 
-// 시스템에 설치된 한글 폰트 등록 시도 (Noto Sans CJK)
+// 한글 폰트 등록 시도
+// 1순위: 프로젝트 번들 폰트 (Vercel/Production 에서도 동작)
+// 2순위: 시스템 폰트 (sandbox/dev 에서만 존재)
 const KOREAN_FONT_CANDIDATES = [
+  path.join(__dirname, '..', 'assets', 'fonts', 'NanumGothicBold.ttf'),
   '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc',
   '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
   '/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc',
