@@ -1475,3 +1475,54 @@ button { cursor: pointer; font-family: inherit; }
     grid-template-columns: 1fr;
   }
 }
+
+/* ─────────────────────────────────────────────
+   관리자 설정 — 비밀번호 변경 폼
+   ───────────────────────────────────────────── */
+.change-password-status {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+.change-password-status.hidden {
+  display: none;
+}
+.change-password-status.info {
+  background: #eef4ff;
+  border-color: #c7d8ff;
+  color: #1b3b8a;
+}
+.change-password-status.success {
+  background: #e8f7ee;
+  border-color: #b9e3c8;
+  color: #1b6b35;
+}
+.change-password-status.error {
+  background: #fdecec;
+  border-color: #f4b8b8;
+  color: #a3231b;
+}
+
+#change-password-form .form-row {
+  margin-bottom: 12px;
+}
+#change-password-form input[type="password"] {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 1rem;
+  border: 1px solid #d8d8d8;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+#change-password-form input[type="password"]:focus {
+  outline: none;
+  border-color: #4a78d3;
+  box-shadow: 0 0 0 3px rgba(74,120,211,0.15);
+}
+#change-password-btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

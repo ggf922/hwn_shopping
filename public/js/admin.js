@@ -260,6 +260,20 @@
     if (tab === 'voucher-list') loadVouchers();
     if (tab === 'products') loadProducts();
     if (tab === 'orders') loadOrders();
+    if (tab === 'settings') {
+      // 비밀번호 변경 폼 초기화 후 첫 입력란 포커스
+      const cur = document.getElementById('current-password');
+      const st = document.getElementById('change-password-status');
+      if (cur) cur.value = '';
+      const np = document.getElementById('new-password');
+      const npc = document.getElementById('new-password-confirm');
+      if (np) np.value = '';
+      if (npc) npc.value = '';
+      if (st) { st.textContent = ''; st.className = 'change-password-status hidden'; }
+      const btn = document.getElementById('change-password-btn');
+      if (btn) btn.disabled = false;
+      setTimeout(() => cur?.focus(), 50);
+    }
   }
   $$('.admin-tab').forEach(b => {
     b.addEventListener('click', () => switchTab(b.dataset.tab));
@@ -1011,4 +1025,113 @@
     }
   }
   $('#copy-orders').addEventListener('click', copyOrdersToClipboard);
+
+  // ─────────────────────────────────────────
+  // ⚙️ 설정 — 관리자 비밀번호 변경
+  // ─────────────────────────────────────────
+  const cpForm = document.getElementById('change-password-form');
+  const cpCurrent = document.getElementById('current-password');
+  const cpNew = document.getElementById('new-password');
+  const cpConfirm = document.getElementById('new-password-confirm');
+  const cpStatus = document.getElementById('change-password-status');
+  const cpBtn = document.getElementById('change-password-btn');
+  const cpReset = document.getElementById('change-password-reset');
+
+  function showCpStatus(msg, type) {
+    if (!cpStatus) return;
+    cpStatus.textContent = msg;
+    cpStatus.className = 'change-password-status ' + (type || 'info');
+    cpStatus.classList.remove('hidden');
+  }
+
+  function clearCpForm() {
+    if (cpCurrent) cpCurrent.value = '';
+    if (cpNew) cpNew.value = '';
+    if (cpConfirm) cpConfirm.value = '';
+    if (cpStatus) {
+      cpStatus.textContent = '';
+      cpStatus.className = 'change-password-status hidden';
+    }
+  }
+
+  cpReset?.addEventListener('click', () => {
+    clearCpForm();
+    cpCurrent?.focus();
+  });
+
+  cpForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const currentPassword = (cpCurrent?.value || '').trim();
+    const newPassword = (cpNew?.value || '').trim();
+    const confirmPassword = (cpConfirm?.value || '').trim();
+
+    // 클라이언트측 1차 검증
+    if (!currentPassword) {
+      showCpStatus('현재 비밀번호를 입력해주세요.', 'error');
+      cpCurrent?.focus();
+      return;
+    }
+    if (!newPassword || newPassword.length < 8) {
+      showCpStatus('새 비밀번호는 최소 8자 이상이어야 합니다.', 'error');
+      cpNew?.focus();
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showCpStatus('새 비밀번호와 확인 입력이 일치하지 않습니다.', 'error');
+      cpConfirm?.focus();
+      return;
+    }
+    if (newPassword === currentPassword) {
+      showCpStatus('새 비밀번호가 현재 비밀번호와 동일합니다. 다른 비밀번호를 사용해주세요.', 'error');
+      cpNew?.focus();
+      return;
+    }
+
+    showCpStatus('변경 중...', 'info');
+    if (cpBtn) cpBtn.disabled = true;
+
+    try {
+      const token = getToken();
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        const msg = data.error || '비밀번호 변경에 실패했습니다.';
+        showCpStatus('❌ ' + msg, 'error');
+        if (cpBtn) cpBtn.disabled = false;
+        return;
+      }
+
+      showCpStatus('✅ 비밀번호가 변경되었습니다. 보안을 위해 3초 후 자동으로 로그아웃됩니다...', 'success');
+      // 입력값 즉시 비우기
+      if (cpCurrent) cpCurrent.value = '';
+      if (cpNew) cpNew.value = '';
+      if (cpConfirm) cpConfirm.value = '';
+
+      setTimeout(() => {
+        // 토큰 폐기 + 로그인 화면으로 이동
+        try {
+          localStorage.removeItem('admin_token');
+          localStorage.removeItem('admin_username');
+          sessionStorage.removeItem('admin_token');
+          // 쿠키 제거
+          document.cookie = 'admin_token=; path=/; max-age=0';
+        } catch (_) {}
+        // 서버측 JWT 시크릿이 이미 회전되었으므로 기존 토큰은 어차피 무효이지만,
+        // 명시적 logout 호출도 시도 (실패해도 무방)
+        fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+        window.location.href = '/admin/login';
+      }, 3000);
+    } catch (e) {
+      showCpStatus('❌ 네트워크 오류: ' + (e.message || '알 수 없는 오류'), 'error');
+      if (cpBtn) cpBtn.disabled = false;
+    }
+  });
 })();

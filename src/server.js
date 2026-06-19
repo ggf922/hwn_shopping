@@ -68,17 +68,17 @@ function ah(fn) {
 // ─────────────────────────────────────────────
 // 인증 API
 // ─────────────────────────────────────────────
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', ah(async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ success: false, error: '아이디와 비밀번호를 입력해주세요.' });
   }
-  const token = auth.login(username, password);
+  const token = await auth.login(username, password);
   if (!token) {
     return res.status(401).json({ success: false, error: '아이디 또는 비밀번호가 올바르지 않습니다.' });
   }
   res.json({ success: true, data: { token, username } });
-});
+}));
 
 app.post('/api/auth/logout', (req, res) => {
   const token = auth.extractToken(req);
@@ -86,14 +86,32 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/auth/me', (req, res) => {
+app.get('/api/auth/me', ah(async (req, res) => {
   const token = auth.extractToken(req);
-  const sess = token ? auth.verify(token) : null;
+  const sess = token ? await auth.verify(token) : null;
   if (!sess) {
     return res.status(401).json({ success: false, error: '인증 필요' });
   }
   res.json({ success: true, data: { username: sess.username } });
-});
+}));
+
+// 관리자 비밀번호 변경
+app.post('/api/auth/change-password', auth.requireAdmin, ah(async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ success: false, error: '현재 비밀번호와 새 비밀번호를 모두 입력해주세요.' });
+  }
+  const result = await auth.changePassword(String(currentPassword), String(newPassword));
+  if (!result.ok) {
+    const status =
+      result.code === 'WRONG_PASSWORD' ? 401 :
+      result.code === 'STORAGE_FAILED' || result.code === 'STORAGE_UNAVAILABLE' ? 500 :
+      400;
+    return res.status(status).json({ success: false, error: result.error, code: result.code });
+  }
+  // 비밀번호 변경 직후 JWT 시크릿이 바뀌어 현재 토큰도 무효화됨 → 프론트가 재로그인 유도
+  res.json({ success: true, message: '비밀번호가 변경되었습니다. 다시 로그인 해주세요.' });
+}));
 
 // ─────────────────────────────────────────────
 // 이미지 업로드 API (관리자 전용)
@@ -537,13 +555,14 @@ app.get('/admin/login', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'admin', 'login.html'));
 });
 
-app.get(['/admin', '/admin/'], (req, res) => {
+app.get(['/admin', '/admin/'], ah(async (req, res) => {
   const token = auth.extractToken(req);
-  if (!token || !auth.verify(token)) {
+  const sess = token ? await auth.verify(token) : null;
+  if (!sess) {
     return res.redirect('/admin/login');
   }
   res.sendFile(path.join(__dirname, '..', 'public', 'admin', 'index.html'));
-});
+}));
 
 // 공통 에러 핸들러
 app.use((err, req, res, next) => {
