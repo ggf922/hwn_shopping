@@ -2,36 +2,30 @@
  * 하원나라 상품권 + 쇼핑몰 서버 (어댑터 패턴 적용)
  *
  * 환경변수:
- *   USE_SUPABASE=true → Supabase 모드 (Vercel/Production)
- *   미설정 또는 false → SQLite 모드 (로컬/sandbox)
+ *   USE_SUPABASE=true          → Supabase DB 모드 (Vercel/Production)
+ *   USE_SUPABASE_STORAGE=true  → Supabase Storage 모드 (이미지)
+ *                                 (USE_SUPABASE=true 이면 자동 활성)
+ *   미설정 또는 false           → SQLite + 로컬 디스크 (sandbox)
  */
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
 const multer = require('multer');
 const db = require('./db');
+const storage = require('./storage');     // 새 추상화 레이어
 const { generateFullSerial, renderVoucherImage } = require('./voucher');
 const auth = require('./auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ─────────────────────────────────────────────
-// 업로드 디렉터리 + multer 설정
-// ─────────────────────────────────────────────
-const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+console.log(`[storage] 모드: ${storage.modeName()}`);
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
-    const safeName = `product-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
-    cb(null, safeName);
-  }
-});
+// ─────────────────────────────────────────────
+// multer: 메모리 저장 (디스크/Storage 어느 쪽이든 통일)
+//   - 메모리 저장 후 storage.uploadBuffer() 가 디스크 or Supabase 로 라우팅
+// ─────────────────────────────────────────────
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = /^image\/(jpeg|jpg|png|webp|gif)$/i;
@@ -44,6 +38,15 @@ const upload = multer({
 
 // 미들웨어
 app.use(express.json({ limit: '2mb' }));
+
+// ─────────────────────────────────────────────
+// /uploads/<filename> 라우팅
+//   - Supabase Storage 모드: Storage Public URL 로 302 redirect
+//   - 로컬 디스크 모드: 그냥 express.static 에서 서빙 (아래 정적 미들웨어에서 처리)
+// ─────────────────────────────────────────────
+if (storage.USE_STORAGE) {
+  app.get('/uploads/:filename', storage.handleUploadsRequest);
+}
 
 // /admin 경로는 별도 라우트로 처리하므로 정적 서빙에서 제외 (보안)
 app.use((req, res, next) => {
@@ -94,13 +97,24 @@ app.get('/api/auth/me', (req, res) => {
 
 // ─────────────────────────────────────────────
 // 이미지 업로드 API (관리자 전용)
+//   - multer.memoryStorage() 로 buffer 받아 storage.uploadBuffer() 로 위임
+//   - 로컬 디스크 또는 Supabase Storage 중 환경에 맞게 자동 라우팅
 // ─────────────────────────────────────────────
 app.post('/api/upload', auth.requireAdmin, (req, res) => {
-  upload.single('image')(req, res, (err) => {
+  upload.single('image')(req, res, async (err) => {
     if (err) return res.status(400).json({ success: false, error: err.message });
     if (!req.file) return res.status(400).json({ success: false, error: '파일이 없습니다.' });
-    const url = `/uploads/${req.file.filename}`;
-    res.json({ success: true, data: { url, filename: req.file.filename, size: req.file.size } });
+    try {
+      const result = await storage.uploadBuffer(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype
+      );
+      res.json({ success: true, data: result });
+    } catch (e) {
+      console.error('[/api/upload] 실패:', e);
+      res.status(500).json({ success: false, error: e.message || '업로드 실패' });
+    }
   });
 });
 
