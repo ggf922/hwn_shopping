@@ -25,6 +25,10 @@
  */
 
 require('dotenv').config({ path: __dirname + '/.env.migration' });
+// Node 20 호환: ws를 글로벌 WebSocket으로 등록 (Supabase realtime 모듈이 요구)
+if (typeof globalThis.WebSocket === 'undefined') {
+    try { globalThis.WebSocket = require('ws'); } catch (_) {}
+}
 const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
