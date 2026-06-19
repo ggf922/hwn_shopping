@@ -1,0 +1,48 @@
+# Vercel 배포 시 제외할 파일들
+# (Vercel은 기본적으로 .gitignore도 따르지만, 추가 명시)
+
+# 로컬 데이터 (Supabase로 이관 완료, 디스크 DB는 sandbox에서만 사용)
+data/
+*.db
+*.db-journal
+*.sqlite
+
+# 백업 (사이즈 큼)
+backups/
+
+# 마이그레이션 스크립트는 런타임에 불필요
+migration/
+
+# 디스크 업로드 이미지 (이미 Supabase Storage 로 이관됨)
+# Vercel 서버리스에서 디스크는 어차피 못 쓰니 함수 번들에 포함시킬 필요 없음
+public/uploads/*
+!public/uploads/.gitkeep
+
+# 백업본
+*.bak
+src/db.js.bak
+
+# 개발 환경
+.env.local
+.env.development
+.env.*.local
+
+# 테스트
+test/
+tests/
+*.test.js
+*.spec.js
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store
+
+# 로그
+*.log
+npm-debug.log*
+
+# README/문서 (배포 후 동작에는 불필요)
+# README.md 는 포함 (Vercel 대시보드에 표시)
+docs/
+CHANGELOG.md

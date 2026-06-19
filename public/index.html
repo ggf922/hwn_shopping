@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>하원나라 - 프리미엄 쇼핑몰</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=19" />
+  <!-- 다음(카카오) 우편번호 검색 API -->
+  <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
 <body>
   <header class="site-header">
@@ -18,7 +20,19 @@
   </header>
 
   <section class="hero">
-    <div class="container">
+    <!-- 배경 동영상 -->
+    <video
+      class="hero-video"
+      src="/videos/hero.mp4"
+      autoplay
+      muted
+      loop
+      playsinline
+      preload="auto"
+      aria-hidden="true"
+    ></video>
+    <div class="hero-overlay"></div>
+    <div class="container hero-content">
       <h2>프리미엄 상품권으로 누리는 특별한 쇼핑</h2>
       <p>하원나라 상품권 한 장으로, 정성스러운 선물을 만나보세요.</p>
     </div>
@@ -28,16 +42,34 @@
     <!-- 상품권 사용 영역 -->
     <section class="voucher-section card">
       <h3>🎁 상품권 사용하기</h3>
+      <p class="voucher-hint">
+        여러 장의 상품권을 등록하면 등록한 순서대로 차감됩니다.
+        (예: 47,500원 결제 시 ①사용하다 남은 상품권 → ②③④ 10,000원 상품권 순으로 차감)
+      </p>
       <div class="voucher-input">
-        <input
-          type="text"
-          id="voucher-serial-input"
-          placeholder="상품권 번호 입력 (예: HWN-2026-AF93875)"
-          autocomplete="off"
-        />
-        <button id="check-voucher-btn" class="btn btn-primary">확인</button>
+        <div class="voucher-input-group">
+          <label class="voucher-prefix" for="voucher-serial-input" id="voucher-prefix">HWN-2026-</label>
+          <input
+            type="text"
+            id="voucher-serial-input"
+            placeholder="예: AF93875"
+            autocomplete="off"
+            maxlength="20"
+            inputmode="latin"
+          />
+        </div>
+        <button id="check-voucher-btn" class="btn btn-primary">＋ 추가</button>
       </div>
       <div id="voucher-status" class="voucher-status hidden"></div>
+
+      <!-- 등록된 상품권 목록 -->
+      <div id="voucher-list-wrap" class="voucher-list-wrap hidden">
+        <div class="voucher-list-header">
+          <span>등록된 상품권 (사용 순서)</span>
+          <span class="voucher-total">합계 잔액: <strong id="voucher-total-balance">0원</strong></span>
+        </div>
+        <ul id="voucher-list" class="voucher-list"></ul>
+      </div>
     </section>
 
     <!-- 제품 목록 -->
@@ -51,32 +83,133 @@
 
   <!-- 구매 모달 -->
   <div id="purchase-modal" class="modal hidden">
-    <div class="modal-content">
+    <div class="modal-content modal-lg">
       <button class="modal-close" id="modal-close">&times;</button>
       <h3>제품 구매</h3>
       <div id="modal-product-info"></div>
+
       <div class="form-row">
         <label>수량</label>
         <input type="number" id="purchase-quantity" value="1" min="1" />
       </div>
+
+      <h4 class="section-title">📦 배송 정보</h4>
+      <div class="form-row">
+        <label>받는 분 성함 *</label>
+        <input type="text" id="recipient-name" placeholder="홍길동" />
+      </div>
+      <div class="form-row">
+        <label>연락처 *</label>
+        <input type="tel" id="recipient-phone" placeholder="010-1234-5678" />
+      </div>
+      <div class="form-row">
+        <label>우편번호</label>
+        <div class="zipcode-row">
+          <input type="text" id="recipient-zipcode" placeholder="12345" readonly />
+          <button type="button" id="search-address-btn" class="btn btn-secondary">
+            🔍 주소 검색
+          </button>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>주소 *</label>
+        <input type="text" id="recipient-address" placeholder="주소 검색 버튼을 눌러 주세요." readonly />
+      </div>
+      <div class="form-row">
+        <label>상세 주소</label>
+        <input type="text" id="recipient-address-detail" placeholder="101동 1004호" />
+      </div>
+      <div class="form-row">
+        <label>배송 메모</label>
+        <textarea id="delivery-memo" placeholder="부재 시 경비실에 맡겨 주세요."></textarea>
+      </div>
+
+      <!-- 개인정보 수집 및 이용 동의 -->
+      <div class="privacy-consent">
+        <label class="privacy-check">
+          <input type="checkbox" id="privacy-agree" />
+          <span><strong>[필수]</strong> 개인정보 수집 및 이용에 동의합니다.</span>
+        </label>
+        <button type="button" class="privacy-toggle-btn" id="privacy-toggle-btn" aria-expanded="false">자세히 보기 ▼</button>
+        <div class="privacy-details hidden" id="privacy-details">
+          <p><strong>· 수집 항목</strong>: 받는 분 성함, 연락처, 우편번호, 주소, 상세 주소, 배송 메모</p>
+          <p><strong>· 수집·이용 목적</strong>: 주문 상품의 배송, 배송 관련 안내 및 고객 문의 대응</p>
+          <p><strong>· 보유·이용 기간</strong>: 전자상거래 등에서의 소비자 보호에 관한 법률에 따라 배송 완료 후 5년간 보관 후 파기</p>
+          <p class="privacy-notice">※ 위 개인정보 수집·이용에 동의하지 않으실 수 있으나, 동의하지 않으실 경우 상품 배송이 불가능합니다.</p>
+        </div>
+      </div>
+
       <div class="total-line">
         <span>결제 금액</span>
         <strong id="purchase-total">0원</strong>
       </div>
       <div class="total-line">
-        <span>상품권 잔액</span>
+        <span>상품권 합계 잔액</span>
         <strong id="purchase-balance">0원</strong>
       </div>
+
+      <!-- 사용될 상품권 사용 순서 미리보기 -->
+      <div id="purchase-usage-preview" class="purchase-usage-preview hidden">
+        <div class="usage-title">상품권 사용 순서</div>
+        <ol id="purchase-usage-list" class="usage-list"></ol>
+      </div>
+
       <button id="confirm-purchase-btn" class="btn btn-primary btn-block">구매하기</button>
+    </div>
+  </div>
+
+  <!-- 다음 우편번호 검색 레이어 (모달 위에 표시) -->
+  <div id="postcode-layer" class="postcode-layer hidden" aria-hidden="true">
+    <div class="postcode-layer-inner">
+      <div class="postcode-layer-header">
+        <span>📮 주소 검색</span>
+        <button type="button" id="postcode-close-btn" class="postcode-close" aria-label="닫기">✕</button>
+      </div>
+      <div id="postcode-embed" class="postcode-embed"></div>
     </div>
   </div>
 
   <footer class="site-footer">
     <div class="container">
-      <p>© 2026 하원나라 (HAWONNARA). All rights reserved.</p>
+      <div class="footer-brand">
+        <strong>하원나라 <span class="brand-en">HAWONNARA</span></strong>
+      </div>
+      <div class="footer-business">
+        <dl class="biz-info">
+          <div class="biz-row">
+            <dt>상호</dt><dd>하원나라</dd>
+            <dt>대표자</dt><dd>오승목</dd>
+          </div>
+          <div class="biz-row">
+            <dt>사업자등록번호</dt>
+            <dd>
+              640-28-01892
+              <a
+                class="biz-verify"
+                href="https://www.ftc.go.kr/bizCommPop.do?wrkr_no=6402801892"
+                target="_blank"
+                rel="noopener noreferrer"
+              >[사업자정보확인]</a>
+            </dd>
+          </div>
+          <div class="biz-row">
+            <dt>사업장 소재지</dt>
+            <dd>서울특별시 강남구 선릉로93길 10, 5층(역삼동, 선일빌딩)</dd>
+          </div>
+          <div class="biz-row">
+            <dt>업태</dt><dd>도소매업, 서비스업</dd>
+            <dt>종목</dt><dd>전자상거래, 유통판매업, 상품권매매업</dd>
+          </div>
+          <div class="biz-row">
+            <dt>개업연월일</dt><dd>2026년 06월 01일</dd>
+            <dt>과세구분</dt><dd>일반과세자</dd>
+          </div>
+        </dl>
+      </div>
+      <p class="footer-copy">© 2026 하원나라 (HAWONNARA). All rights reserved.</p>
     </div>
   </footer>
 
-  <script src="/js/shop.js"></script>
+  <script src="/js/shop.js?v=16"></script>
 </body>
 </html>

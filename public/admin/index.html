@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>하원나라 - 관리자</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=17" />
 </head>
 <body>
   <header class="site-header">
@@ -13,6 +13,8 @@
       <nav>
         <a href="/">쇼핑몰</a>
         <a href="/admin" class="active">관리자</a>
+        <span class="admin-user" id="admin-user-info"></span>
+        <button class="btn btn-secondary btn-sm" id="logout-btn">로그아웃</button>
       </nav>
     </div>
   </header>
@@ -44,13 +46,58 @@
           <div id="voucher-result-grid" class="voucher-result-grid"></div>
         </div>
       </div>
+
+      <!-- 발권 금액 관리 -->
+      <div class="card" style="margin-top:20px">
+        <div class="toolbar" style="margin-bottom:8px">
+          <h3>💰 발권 금액 관리</h3>
+          <button type="button" class="btn btn-secondary btn-sm" id="toggle-amount-mgmt">펼치기 ▾</button>
+        </div>
+        <div id="amount-mgmt-body" class="hidden">
+          <p style="color:#666;margin-top:4px;font-size:0.9rem">
+            발권 시 선택 가능한 금액을 추가하거나 삭제할 수 있습니다.<br>
+            ※ 이미 발권된 상품권이 있는 금액은 삭제 시 비활성화(목록에서 숨김) 처리됩니다.
+          </p>
+
+          <div class="form-row" style="margin-top:14px;display:flex;gap:8px;align-items:flex-end">
+            <div style="flex:1">
+              <label>새 금액 추가 (원)</label>
+              <input type="number" id="new-amount-input" placeholder="예: 250000" min="1000" max="100000000" step="1000" />
+            </div>
+            <button type="button" class="btn btn-primary" id="add-amount-btn">➕ 추가</button>
+          </div>
+
+          <div id="amount-mgmt-list" style="margin-top:16px"></div>
+        </div>
+      </div>
     </section>
 
     <!-- 상품권 목록 -->
     <section id="tab-voucher-list" class="tab-panel hidden">
       <div class="toolbar">
         <h3>📋 발권된 상품권 목록</h3>
-        <button class="btn btn-secondary btn-sm" id="refresh-vouchers">새로고침</button>
+        <div class="toolbar-actions">
+          <button class="btn btn-secondary btn-sm" id="copy-vouchers" title="선택한 기간의 데이터를 엑셀/구글 시트용 형식으로 복사">📋 복사하기</button>
+          <button class="btn btn-secondary btn-sm" id="refresh-vouchers">새로고침</button>
+        </div>
+      </div>
+      <!-- 기간 선택 (복사하기에만 적용) -->
+      <div class="date-filter" data-target="vouchers">
+        <span class="date-filter-label">📅 복사 기간:</span>
+        <div class="date-filter-quick">
+          <button type="button" class="quick-btn" data-range="today">오늘</button>
+          <button type="button" class="quick-btn" data-range="yesterday">어제</button>
+          <button type="button" class="quick-btn" data-range="last7">최근 7일</button>
+          <button type="button" class="quick-btn" data-range="last30">최근 30일</button>
+          <button type="button" class="quick-btn" data-range="thismonth">이번 달</button>
+          <button type="button" class="quick-btn active" data-range="all">전체</button>
+        </div>
+        <div class="date-filter-range">
+          <input type="date" id="vouchers-date-from" class="date-input" />
+          <span class="date-sep">~</span>
+          <input type="date" id="vouchers-date-to" class="date-input" />
+        </div>
+        <span class="date-filter-count" id="vouchers-count-preview"></span>
       </div>
       <table class="data-table">
         <thead>
@@ -78,6 +125,7 @@
       <table class="data-table">
         <thead>
           <tr>
+            <th style="width:80px">순서</th>
             <th style="width:60px">이미지</th>
             <th>제품명</th>
             <th>가격</th>
@@ -87,7 +135,7 @@
           </tr>
         </thead>
         <tbody id="product-tbody">
-          <tr><td colspan="6" class="loading">불러오는 중...</td></tr>
+          <tr><td colspan="7" class="loading">불러오는 중...</td></tr>
         </tbody>
       </table>
     </section>
@@ -96,24 +144,56 @@
     <section id="tab-orders" class="tab-panel hidden">
       <div class="toolbar">
         <h3>🧾 주문 내역</h3>
-        <button class="btn btn-secondary btn-sm" id="refresh-orders">새로고침</button>
+        <div class="toolbar-actions">
+          <button class="btn btn-secondary btn-sm" id="copy-orders" title="선택한 기간의 데이터를 엑셀/구글 시트용 형식으로 복사">📋 복사하기</button>
+          <button class="btn btn-secondary btn-sm" id="refresh-orders">새로고침</button>
+        </div>
+      </div>
+      <!-- 기간 선택 (복사하기에만 적용) -->
+      <div class="date-filter" data-target="orders">
+        <span class="date-filter-label">📅 복사 기간:</span>
+        <div class="date-filter-quick">
+          <button type="button" class="quick-btn" data-range="today">오늘</button>
+          <button type="button" class="quick-btn" data-range="yesterday">어제</button>
+          <button type="button" class="quick-btn" data-range="last7">최근 7일</button>
+          <button type="button" class="quick-btn" data-range="last30">최근 30일</button>
+          <button type="button" class="quick-btn" data-range="thismonth">이번 달</button>
+          <button type="button" class="quick-btn active" data-range="all">전체</button>
+        </div>
+        <div class="date-filter-range">
+          <input type="date" id="orders-date-from" class="date-input" />
+          <span class="date-sep">~</span>
+          <input type="date" id="orders-date-to" class="date-input" />
+        </div>
+        <span class="date-filter-count" id="orders-count-preview"></span>
       </div>
       <table class="data-table">
         <thead>
           <tr>
             <th>주문번호</th>
-            <th>상품권</th>
-            <th>제품명</th>
-            <th>수량</th>
-            <th>결제금액</th>
+            <th>상품/금액</th>
+            <th>받는 분</th>
+            <th>연락처</th>
+            <th>배송지</th>
+            <th>배송메모</th>
+            <th>상태</th>
             <th>주문일시</th>
           </tr>
         </thead>
         <tbody id="order-tbody">
-          <tr><td colspan="6" class="loading">불러오는 중...</td></tr>
+          <tr><td colspan="8" class="loading">불러오는 중...</td></tr>
         </tbody>
       </table>
     </section>
+
+    <!-- 주문 상세 모달 -->
+    <div id="order-detail-modal" class="modal hidden">
+      <div class="modal-content">
+        <button class="modal-close" id="order-detail-close">&times;</button>
+        <h3>📋 주문 상세</h3>
+        <div id="order-detail-body"></div>
+      </div>
+    </div>
   </main>
 
   <!-- 제품 등록/수정 모달 -->
@@ -135,8 +215,25 @@
         <input type="number" id="product-stock" min="0" value="0" />
       </div>
       <div class="form-row">
-        <label>이미지 URL</label>
-        <input type="text" id="product-image" placeholder="https://..." />
+        <label>제품 이미지</label>
+        <div class="image-upload-area">
+          <div class="image-preview" id="image-preview">
+            <span class="image-placeholder">이미지를 업로드하거나 URL을 입력하세요</span>
+          </div>
+          <div class="upload-controls">
+            <input type="file" id="product-image-file" accept="image/jpeg,image/png,image/webp,image/gif" hidden />
+            <button type="button" class="btn btn-secondary btn-sm" id="upload-image-btn">
+              📁 이미지 파일 업로드
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm hidden" id="remove-image-btn">
+              ❌ 이미지 제거
+            </button>
+          </div>
+          <input type="text" id="product-image" placeholder="또는 이미지 URL 직접 입력 (https://...)" style="margin-top:8px" />
+          <div class="upload-info">
+            💡 권장 사이즈: <strong>800 × 800 px</strong> (정사각형, 1:1 비율) / 최대 5MB / JPG·PNG·WEBP·GIF
+          </div>
+        </div>
       </div>
       <div class="form-row">
         <label>설명</label>
@@ -146,6 +243,6 @@
     </div>
   </div>
 
-  <script src="/js/admin.js"></script>
+  <script src="/js/admin.js?v=14"></script>
 </body>
 </html>

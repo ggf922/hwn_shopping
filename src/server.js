@@ -1,17 +1,58 @@
 /**
- * 하원나라 상품권 + 쇼핑몰 서버
+ * 하원나라 상품권 + 쇼핑몰 서버 (어댑터 패턴 적용)
+ *
+ * 환경변수:
+ *   USE_SUPABASE=true          → Supabase DB 모드 (Vercel/Production)
+ *   USE_SUPABASE_STORAGE=true  → Supabase Storage 모드 (이미지)
+ *                                 (USE_SUPABASE=true 이면 자동 활성)
+ *   미설정 또는 false           → SQLite + 로컬 디스크 (sandbox)
  */
 const express = require('express');
 const path = require('path');
+const multer = require('multer');
 const db = require('./db');
+const storage = require('./storage');     // 새 추상화 레이어
 const { generateFullSerial, renderVoucherImage } = require('./voucher');
+const auth = require('./auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+console.log(`[storage] 모드: ${storage.modeName()}`);
+
+// ─────────────────────────────────────────────
+// multer: 메모리 저장 (디스크/Storage 어느 쪽이든 통일)
+//   - 메모리 저장 후 storage.uploadBuffer() 가 디스크 or Supabase 로 라우팅
+// ─────────────────────────────────────────────
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = /^image\/(jpeg|jpg|png|webp|gif)$/i;
+    if (!allowed.test(file.mimetype)) {
+      return cb(new Error('이미지 파일(jpg, png, webp, gif)만 업로드 가능합니다.'));
+    }
+    cb(null, true);
+  }
+});
+
 // 미들웨어
 app.use(express.json({ limit: '2mb' }));
-app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// ─────────────────────────────────────────────
+// /uploads/<filename> 라우팅
+//   - Supabase Storage 모드: Storage Public URL 로 302 redirect
+//   - 로컬 디스크 모드: 그냥 express.static 에서 서빙 (아래 정적 미들웨어에서 처리)
+// ─────────────────────────────────────────────
+if (storage.USE_STORAGE) {
+  app.get('/uploads/:filename', storage.handleUploadsRequest);
+}
+
+// /admin 경로는 별도 라우트로 처리하므로 정적 서빙에서 제외 (보안)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/admin')) return next();
+  return express.static(path.join(__dirname, '..', 'public'))(req, res, next);
+});
 
 // 간단한 로깅
 app.use((req, res, next) => {
@@ -19,173 +60,233 @@ app.use((req, res, next) => {
   next();
 });
 
+// 공통 오류 처리 헬퍼 (async 라우트 catch)
+function ah(fn) {
+  return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+}
+
+// ─────────────────────────────────────────────
+// 인증 API
+// ─────────────────────────────────────────────
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ success: false, error: '아이디와 비밀번호를 입력해주세요.' });
+  }
+  const token = auth.login(username, password);
+  if (!token) {
+    return res.status(401).json({ success: false, error: '아이디 또는 비밀번호가 올바르지 않습니다.' });
+  }
+  res.json({ success: true, data: { token, username } });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const token = auth.extractToken(req);
+  if (token) auth.logout(token);
+  res.json({ success: true });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const token = auth.extractToken(req);
+  const sess = token ? auth.verify(token) : null;
+  if (!sess) {
+    return res.status(401).json({ success: false, error: '인증 필요' });
+  }
+  res.json({ success: true, data: { username: sess.username } });
+});
+
+// ─────────────────────────────────────────────
+// 이미지 업로드 API (관리자 전용)
+//   - multer.memoryStorage() 로 buffer 받아 storage.uploadBuffer() 로 위임
+//   - 로컬 디스크 또는 Supabase Storage 중 환경에 맞게 자동 라우팅
+// ─────────────────────────────────────────────
+app.post('/api/upload', auth.requireAdmin, (req, res) => {
+  upload.single('image')(req, res, async (err) => {
+    if (err) return res.status(400).json({ success: false, error: err.message });
+    if (!req.file) return res.status(400).json({ success: false, error: '파일이 없습니다.' });
+    try {
+      const result = await storage.uploadBuffer(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype
+      );
+      res.json({ success: true, data: result });
+    } catch (e) {
+      console.error('[/api/upload] 실패:', e);
+      res.status(500).json({ success: false, error: e.message || '업로드 실패' });
+    }
+  });
+});
+
 // ─────────────────────────────────────────────
 // 제품 (Products) CRUD API
 // ─────────────────────────────────────────────
 
 // 제품 목록
-app.get('/api/products', (req, res) => {
-  try {
-    const rows = db.prepare('SELECT * FROM products ORDER BY created_at DESC').all();
-    res.json({ success: true, data: rows });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
+app.get('/api/products', ah(async (req, res) => {
+  const includeDeleted = req.query.include_deleted === '1';
+  const rows = await db.products.list({ includeDeleted });
+  res.json({ success: true, data: rows });
+}));
 
 // 제품 단건
-app.get('/api/products/:id', (req, res) => {
-  try {
-    const row = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
-    if (!row) return res.status(404).json({ success: false, error: '제품을 찾을 수 없습니다.' });
-    res.json({ success: true, data: row });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
+app.get('/api/products/:id', ah(async (req, res) => {
+  const row = await db.products.get(req.params.id);
+  if (!row) return res.status(404).json({ success: false, error: '제품을 찾을 수 없습니다.' });
+  res.json({ success: true, data: row });
+}));
 
-// 제품 등록
-app.post('/api/products', (req, res) => {
-  try {
-    const { name, price, description, image_url, stock } = req.body;
-    if (!name || price == null) {
-      return res.status(400).json({ success: false, error: '이름과 가격은 필수입니다.' });
-    }
-    const result = db
-      .prepare(
-        'INSERT INTO products (name, price, description, image_url, stock) VALUES (?, ?, ?, ?, ?)'
-      )
-      .run(name, Number(price), description || '', image_url || '', Number(stock) || 0);
-    const created = db.prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid);
-    res.status(201).json({ success: true, data: created });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+// 제품 등록 (관리자)
+app.post('/api/products', auth.requireAdmin, ah(async (req, res) => {
+  const { name, price, description, image_url, stock } = req.body;
+  if (!name || price == null) {
+    return res.status(400).json({ success: false, error: '이름과 가격은 필수입니다.' });
   }
-});
+  const created = await db.products.create({ name, price, description, image_url, stock });
+  res.status(201).json({ success: true, data: created });
+}));
 
-// 제품 수정
-app.put('/api/products/:id', (req, res) => {
-  try {
-    const { name, price, description, image_url, stock } = req.body;
-    const existing = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
-    if (!existing) return res.status(404).json({ success: false, error: '제품을 찾을 수 없습니다.' });
+// 제품 수정 (관리자)
+app.put('/api/products/:id', auth.requireAdmin, ah(async (req, res) => {
+  const updated = await db.products.update(req.params.id, req.body);
+  if (!updated) return res.status(404).json({ success: false, error: '제품을 찾을 수 없습니다.' });
+  res.json({ success: true, data: updated });
+}));
 
-    db.prepare(
-      `UPDATE products SET
-        name = ?, price = ?, description = ?, image_url = ?, stock = ?,
-        updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`
-    ).run(
-      name ?? existing.name,
-      price != null ? Number(price) : existing.price,
-      description ?? existing.description,
-      image_url ?? existing.image_url,
-      stock != null ? Number(stock) : existing.stock,
-      req.params.id
-    );
-    const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
-    res.json({ success: true, data: updated });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+// 제품 순서 일괄 변경 (관리자)
+// — 라우트 순서: /reorder 가 /:id/move 보다 먼저 등장하도록 배치하는 것이 중요!
+app.put('/api/products/reorder', auth.requireAdmin, ah(async (req, res) => {
+  const ids = (req.body && req.body.ids) || [];
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'ids 배열이 필요합니다.' });
   }
-});
+  const result = await db.products.reorder(ids);
+  res.json({ success: true, count: result.count });
+}));
 
-// 제품 삭제
-app.delete('/api/products/:id', (req, res) => {
-  try {
-    const result = db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
-    if (result.changes === 0) return res.status(404).json({ success: false, error: '제품을 찾을 수 없습니다.' });
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+// 제품 순서 단건 이동 (관리자)
+app.post('/api/products/:id/move', auth.requireAdmin, ah(async (req, res) => {
+  const direction = req.body && req.body.direction;
+  if (direction !== 'up' && direction !== 'down') {
+    return res.status(400).json({ success: false, error: "direction은 'up' 또는 'down'이어야 합니다." });
   }
-});
+  const result = await db.products.move(req.params.id, direction);
+  if (result.notFound) return res.status(404).json({ success: false, error: '제품을 찾을 수 없습니다.' });
+  if (result.atBoundary) {
+    return res.json({ success: true, moved: false, message: direction === 'up' ? '이미 최상단입니다.' : '이미 최하단입니다.' });
+  }
+  res.json({ success: true, moved: true, direction });
+}));
+
+// 제품 삭제 (관리자)
+app.delete('/api/products/:id', auth.requireAdmin, ah(async (req, res) => {
+  const result = await db.products.remove(req.params.id);
+  if (result.notFound) return res.status(404).json({ success: false, error: '제품을 찾을 수 없습니다.' });
+  if (result.mode === 'hard') {
+    return res.json({ success: true, mode: 'hard', message: '제품이 삭제되었습니다.' });
+  }
+  res.json({
+    success: true,
+    mode: 'soft',
+    message: `주문 이력이 있어 목록에서 숨김 처리되었습니다. (관련 주문 ${result.orderCount}건 보존)`
+  });
+}));
+
+// ─────────────────────────────────────────────
+// 발권 금액 관리 API
+// ─────────────────────────────────────────────
+
+app.get('/api/voucher-amounts', ah(async (req, res) => {
+  const rows = await db.voucherAmounts.list();
+  res.json({ success: true, data: rows });
+}));
+
+app.post('/api/voucher-amounts', auth.requireAdmin, ah(async (req, res) => {
+  const amount = Number(req.body.amount);
+  if (!Number.isInteger(amount) || amount < 1000 || amount > 100000000) {
+    return res.status(400).json({
+      success: false,
+      error: '금액은 1,000원 이상 1억원 이하의 정수여야 합니다.'
+    });
+  }
+  const result = await db.voucherAmounts.create(amount);
+  if (result.duplicate) return res.status(400).json({ success: false, error: '이미 등록된 금액입니다.' });
+  res.status(201).json({ success: true, data: result.row });
+}));
+
+app.delete('/api/voucher-amounts/:id', auth.requireAdmin, ah(async (req, res) => {
+  const result = await db.voucherAmounts.remove(Number(req.params.id));
+  if (result.notFound) return res.status(404).json({ success: false, error: '해당 금액을 찾을 수 없습니다.' });
+  if (result.mode === 'soft') {
+    return res.json({
+      success: true,
+      mode: 'soft',
+      message: `해당 금액으로 발권된 상품권이 ${result.usedCount}장 존재하여 비활성화되었습니다. (목록에서는 숨김 처리)`
+    });
+  }
+  res.json({ success: true, mode: 'hard', message: '금액이 삭제되었습니다.' });
+}));
 
 // ─────────────────────────────────────────────
 // 상품권 (Vouchers) API
 // ─────────────────────────────────────────────
 
-// 발권 가능 금액
-const VALID_AMOUNTS = [10000, 20000, 50000, 100000, 300000, 500000, 1000000];
+// 상품권 목록 (관리자)
+app.get('/api/vouchers', auth.requireAdmin, ah(async (req, res) => {
+  const includeDeleted = req.query.include_deleted === '1';
+  const rows = await db.vouchers.list({ includeDeleted });
+  res.json({ success: true, data: rows });
+}));
 
-// 상품권 목록
-app.get('/api/vouchers', (req, res) => {
-  try {
-    const rows = db.prepare('SELECT * FROM vouchers ORDER BY issued_at DESC').all();
-    res.json({ success: true, data: rows });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
+// 상품권 단건 조회 (시리얼)
+app.get('/api/vouchers/:serial', ah(async (req, res) => {
+  const row = await db.vouchers.get(req.params.serial);
+  if (!row) return res.status(404).json({ success: false, error: '상품권을 찾을 수 없습니다.' });
+  res.json({ success: true, data: row });
+}));
 
-// 상품권 단건 조회 (시리얼 번호로)
-app.get('/api/vouchers/:serial', (req, res) => {
-  try {
-    const row = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(req.params.serial);
-    if (!row) return res.status(404).json({ success: false, error: '상품권을 찾을 수 없습니다.' });
-    res.json({ success: true, data: row });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-// 상품권 발권
-app.post('/api/vouchers', (req, res) => {
-  try {
-    const { amount, quantity = 1 } = req.body;
-    if (!VALID_AMOUNTS.includes(Number(amount))) {
-      return res.status(400).json({
-        success: false,
-        error: `발권 가능 금액: ${VALID_AMOUNTS.map(a => a.toLocaleString() + '원').join(', ')}`
-      });
-    }
-    const qty = Math.min(Math.max(Number(quantity) || 1, 1), 100);
-
-    const insert = db.prepare(
-      'INSERT INTO vouchers (serial, amount, balance) VALUES (?, ?, ?)'
-    );
-    const created = [];
-    const tx = db.transaction(() => {
-      for (let i = 0; i < qty; i++) {
-        let serial;
-        let attempts = 0;
-        // 중복 방지
-        while (attempts < 10) {
-          serial = generateFullSerial();
-          const exists = db.prepare('SELECT 1 FROM vouchers WHERE serial = ?').get(serial);
-          if (!exists) break;
-          attempts++;
-        }
-        const result = insert.run(serial, Number(amount), Number(amount));
-        created.push(db.prepare('SELECT * FROM vouchers WHERE id = ?').get(result.lastInsertRowid));
-      }
+// 상품권 발권 (관리자)
+app.post('/api/vouchers', auth.requireAdmin, ah(async (req, res) => {
+  const { amount, quantity = 1 } = req.body;
+  const validAmounts = await db.voucherAmounts.getValidAmounts();
+  if (!validAmounts.includes(Number(amount))) {
+    return res.status(400).json({
+      success: false,
+      error: `발권 가능 금액: ${validAmounts.map(a => a.toLocaleString() + '원').join(', ')}`
     });
-    tx();
-    res.status(201).json({ success: true, data: created });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
   }
-});
+  const created = await db.vouchers.create({
+    amount: Number(amount),
+    quantity,
+    generateSerial: generateFullSerial,
+  });
+  res.status(201).json({ success: true, data: created });
+}));
 
 // 상품권 삭제 (관리자)
-app.delete('/api/vouchers/:serial', (req, res) => {
-  try {
-    const result = db.prepare('DELETE FROM vouchers WHERE serial = ?').run(req.params.serial);
-    if (result.changes === 0) return res.status(404).json({ success: false, error: '상품권을 찾을 수 없습니다.' });
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+app.delete('/api/vouchers/:serial', auth.requireAdmin, ah(async (req, res) => {
+  const result = await db.vouchers.remove(req.params.serial);
+  if (result.notFound) return res.status(404).json({ success: false, error: '상품권을 찾을 수 없습니다.' });
+  if (result.mode === 'hard') {
+    return res.json({ success: true, mode: 'hard', message: '상품권이 삭제되었습니다.' });
   }
-});
+  res.json({
+    success: true,
+    mode: 'soft',
+    message: `주문 이력이 있어 목록에서 숨김 처리되었습니다. (관련 주문 ${result.distinctOrderCount}건 보존)`
+  });
+}));
 
 // 상품권 이미지 다운로드
-app.get('/api/vouchers/:serial/image', async (req, res) => {
+app.get('/api/vouchers/:serial/image', ah(async (req, res) => {
+  const row = await db.vouchers.get(req.params.serial);
+  if (!row) return res.status(404).send('상품권을 찾을 수 없습니다.');
   try {
-    const row = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(req.params.serial);
-    if (!row) return res.status(404).send('상품권을 찾을 수 없습니다.');
-
     const buffer = await renderVoucherImage({ serial: row.serial, amount: row.amount });
     res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     if (req.query.download === '1') {
       res.setHeader('Content-Disposition', `attachment; filename="${row.serial}.png"`);
     }
@@ -194,90 +295,154 @@ app.get('/api/vouchers/:serial/image', async (req, res) => {
     console.error('이미지 생성 오류:', e);
     res.status(500).send('이미지 생성 실패: ' + e.message);
   }
-});
+}));
 
 // ─────────────────────────────────────────────
-// 주문 (Orders) API - 상품권으로 결제
+// 주문 (Orders) API
 // ─────────────────────────────────────────────
 
 // 구매 처리
-app.post('/api/orders', (req, res) => {
-  try {
-    const { voucher_serial, product_id, quantity = 1 } = req.body;
-    if (!voucher_serial || !product_id) {
-      return res.status(400).json({ success: false, error: '상품권 번호와 제품을 선택해주세요.' });
+app.post('/api/orders', ah(async (req, res) => {
+  const {
+    voucher_serials, voucher_serial, product_id, quantity = 1,
+    recipient_name, recipient_phone, recipient_zipcode,
+    recipient_address, recipient_address_detail, delivery_memo
+  } = req.body;
+
+  let serials = [];
+  if (Array.isArray(voucher_serials) && voucher_serials.length > 0) {
+    serials = voucher_serials.map(s => String(s || '').trim().toUpperCase()).filter(Boolean);
+  } else if (voucher_serial) {
+    serials = [String(voucher_serial).trim().toUpperCase()];
+  }
+
+  if (serials.length === 0 || !product_id) {
+    return res.status(400).json({ success: false, error: '상품권 번호와 제품을 선택해주세요.' });
+  }
+
+  // 중복 시리얼 차단
+  const dupCheck = new Set();
+  for (const s of serials) {
+    if (dupCheck.has(s)) {
+      return res.status(400).json({ success: false, error: `같은 상품권이 중복으로 등록되어 있습니다: ${s}` });
     }
+    dupCheck.add(s);
+  }
 
-    const voucher = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(voucher_serial);
-    if (!voucher) return res.status(404).json({ success: false, error: '존재하지 않는 상품권입니다.' });
-    if (voucher.status !== 'active') {
-      return res.status(400).json({ success: false, error: '사용할 수 없는 상품권입니다.' });
-    }
-
-    const product = db.prepare('SELECT * FROM products WHERE id = ?').get(product_id);
-    if (!product) return res.status(404).json({ success: false, error: '존재하지 않는 제품입니다.' });
-
-    const qty = Math.max(Number(quantity) || 1, 1);
-    if (product.stock < qty) {
-      return res.status(400).json({ success: false, error: `재고가 부족합니다. (재고: ${product.stock})` });
-    }
-
-    const totalPrice = product.price * qty;
-    if (voucher.balance < totalPrice) {
-      return res.status(400).json({
-        success: false,
-        error: `상품권 잔액이 부족합니다. (잔액: ${voucher.balance.toLocaleString()}원, 필요: ${totalPrice.toLocaleString()}원)`
-      });
-    }
-
-    // 트랜잭션
-    const tx = db.transaction(() => {
-      const newBalance = voucher.balance - totalPrice;
-      const newStatus = newBalance === 0 ? 'used' : 'active';
-      const usedAt = newBalance === 0 ? new Date().toISOString() : null;
-
-      db.prepare(
-        'UPDATE vouchers SET balance = ?, status = ?, used_at = ? WHERE serial = ?'
-      ).run(newBalance, newStatus, usedAt, voucher_serial);
-
-      db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(qty, product_id);
-
-      const result = db
-        .prepare(
-          'INSERT INTO orders (voucher_serial, product_id, product_name, quantity, total_price) VALUES (?, ?, ?, ?, ?)'
-        )
-        .run(voucher_serial, product_id, product.name, qty, totalPrice);
-      return result.lastInsertRowid;
+  if (!recipient_name || !recipient_phone || !recipient_address) {
+    return res.status(400).json({
+      success: false,
+      error: '받는 분 성함, 연락처, 주소는 필수 입력 항목입니다.'
     });
-    const orderId = tx();
-
-    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
-    const updatedVoucher = db.prepare('SELECT * FROM vouchers WHERE serial = ?').get(voucher_serial);
-    res.status(201).json({ success: true, data: { order, voucher: updatedVoucher } });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
   }
-});
 
-// 주문 목록
-app.get('/api/orders', (req, res) => {
-  try {
-    const rows = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all();
-    res.json({ success: true, data: rows });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+  const result = await db.orders.create({
+    serials,
+    product_id,
+    quantity,
+    recipient: {
+      name: recipient_name,
+      phone: recipient_phone,
+      zipcode: recipient_zipcode,
+      address: recipient_address,
+      address_detail: recipient_address_detail,
+      memo: delivery_memo,
+    },
+  });
+
+  if (result.error) {
+    const err = result.error;
+    const messages = {
+      VOUCHER_NOT_FOUND: `존재하지 않는 상품권입니다: ${err.serial}`,
+      VOUCHER_DELETED: `사용할 수 없는(삭제됨) 상품권입니다: ${err.serial}`,
+      VOUCHER_USED: `이미 사용 완료된 상품권입니다: ${err.serial}`,
+      VOUCHER_NO_BALANCE: `잔액이 없는 상품권입니다: ${err.serial}`,
+      PRODUCT_NOT_FOUND: '존재하지 않는 제품입니다.',
+      PRODUCT_DELETED: '판매가 중단된 제품입니다.',
+      OUT_OF_STOCK: `재고가 부족합니다. (재고: ${err.stock})`,
+      INSUFFICIENT_BALANCE: `상품권 잔액 합계가 부족합니다. (잔액 합계: ${(err.totalBalance||0).toLocaleString()}원, 필요: ${(err.totalPrice||0).toLocaleString()}원)`,
+    };
+    const status = (err.code === 'VOUCHER_NOT_FOUND' || err.code === 'PRODUCT_NOT_FOUND') ? 404 : 400;
+    return res.status(status).json({ success: false, error: messages[err.code] || err.code });
   }
-});
+
+  res.status(201).json({
+    success: true,
+    data: {
+      order: result.order,
+      usages: result.usages,
+      vouchers: result.vouchers,
+      voucher: result.voucher,
+    }
+  });
+}));
+
+// 주문 목록 (관리자)
+app.get('/api/orders', auth.requireAdmin, ah(async (req, res) => {
+  const rows = await db.orders.list();
+  res.json({ success: true, data: rows });
+}));
+
+// 주문 상태 변경 (관리자)
+app.put('/api/orders/:id/status', auth.requireAdmin, ah(async (req, res) => {
+  const { status } = req.body;
+  const allowed = ['pending', 'preparing', 'shipped', 'delivered', 'cancelled'];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ success: false, error: '유효하지 않은 상태입니다.' });
+  }
+
+  const result = await db.orders.updateStatus(req.params.id, status);
+  if (result.notFound) return res.status(404).json({ success: false, error: '주문을 찾을 수 없습니다.' });
+
+  if (result.error) {
+    const err = result.error;
+    const messages = {
+      VOUCHER_NOT_FOUND: `복원 불가: 상품권을 찾을 수 없습니다 (${err.serial}).`,
+      INSUFFICIENT_BALANCE_RESTORE: `복원 불가: 상품권 ${err.serial} 잔액(${(err.balance||0).toLocaleString()}원)이 부족하여 ${(err.needed||0).toLocaleString()}원을 다시 차감할 수 없습니다.`,
+      OUT_OF_STOCK_RESTORE: `복원 불가: 제품 재고가 부족합니다. (필요 ${err.needed}개, 현재 ${err.stock}개)`,
+    };
+    return res.status(400).json({ success: false, error: messages[err.code] || err.code });
+  }
+
+  res.json({
+    success: true,
+    data: result.order,
+    restored: !!result.restored,
+    restored_vouchers: result.restored_vouchers,
+    restored_stock: result.restored_stock,
+    rededucted: !!result.rededucted,
+  });
+}));
 
 // ─────────────────────────────────────────────
-// 라우트
+// 페이지 라우트
 // ─────────────────────────────────────────────
-app.get('/admin', (req, res) => {
+
+app.get('/admin/login', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'admin', 'login.html'));
+});
+
+app.get(['/admin', '/admin/'], (req, res) => {
+  const token = auth.extractToken(req);
+  if (!token || !auth.verify(token)) {
+    return res.redirect('/admin/login');
+  }
   res.sendFile(path.join(__dirname, '..', 'public', 'admin', 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🎁 하원나라 서버 실행 중`);
-  console.log(`   - 쇼핑몰:   http://localhost:${PORT}/`);
-  console.log(`   - 관리자:   http://localhost:${PORT}/admin\n`);
+// 공통 에러 핸들러
+app.use((err, req, res, next) => {
+  console.error('[Unhandled]', err);
+  res.status(500).json({ success: false, error: err.message || '서버 오류' });
 });
+
+// Vercel 등 외부 환경에서는 listen 하지 않고 app만 export
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n🎁 하원나라 서버 실행 중 (${db._type || 'unknown'} 모드)`);
+    console.log(`   - 쇼핑몰:   http://localhost:${PORT}/`);
+    console.log(`   - 관리자:   http://localhost:${PORT}/admin\n`);
+  });
+}
+
+module.exports = app;
