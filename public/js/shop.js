@@ -478,6 +478,177 @@
     });
   }
 
+  // ─────────────────────────────────────────────
+  // 주문 내역 확인 (비회원 조회)
+  // ─────────────────────────────────────────────
+  const lookupNameEl = $('#lookup-name');
+  const lookupPhone4El = $('#lookup-phone4');
+  const lookupBtn = $('#lookup-order-btn');
+  const lookupStatusEl = $('#lookup-status');
+  const lookupResultEl = $('#lookup-result');
+
+  const ORDER_STATUS_LABEL = {
+    pending:    { label: '결제완료', cls: 'pending' },
+    preparing:  { label: '배송준비', cls: 'preparing' },
+    shipped:    { label: '배송중',   cls: 'shipped' },
+    delivered:  { label: '배송완료', cls: 'delivered' },
+    cancelled:  { label: '취소',     cls: 'cancelled' }
+  };
+
+  function escapeHtml(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatPrice(n) {
+    return (Number(n) || 0).toLocaleString() + '원';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+  }
+
+  function showLookupStatus(msg, type) {
+    if (!lookupStatusEl) return;
+    lookupStatusEl.classList.remove('hidden', 'is-error', 'is-info', 'is-success');
+    if (type) lookupStatusEl.classList.add('is-' + type);
+    lookupStatusEl.textContent = msg;
+  }
+
+  function clearLookupStatus() {
+    if (!lookupStatusEl) return;
+    lookupStatusEl.classList.add('hidden');
+    lookupStatusEl.textContent = '';
+  }
+
+  function renderLookupResults(items, meta) {
+    if (!lookupResultEl) return;
+    if (!items || items.length === 0) {
+      lookupResultEl.classList.remove('hidden');
+      lookupResultEl.innerHTML = `
+        <div class="lookup-empty">
+          <p>일치하는 주문이 없습니다.</p>
+          <small>받는 분 성함이 주문 시 입력하신 이름과 정확히 일치하는지 확인해 주세요.</small>
+        </div>
+      `;
+      return;
+    }
+
+    const verified = !!(meta && meta.verified);
+    const verifyNote = verified
+      ? `<div class="lookup-verified">✅ 본인 확인 완료 — 전체 정보가 표시됩니다.</div>`
+      : `<div class="lookup-masked-note">🔒 개인정보 보호를 위해 일부 정보가 마스킹 처리되었습니다. 휴대폰 뒷 4자리를 입력하시면 전체 정보를 보실 수 있습니다.</div>`;
+
+    const cards = items.map(o => {
+      const s = ORDER_STATUS_LABEL[o.status] || ORDER_STATUS_LABEL.pending;
+      return `
+        <div class="order-card">
+          <div class="order-card-head">
+            <span class="order-card-date">${escapeHtml(formatDate(o.created_at))}</span>
+            <span class="badge status-${s.cls}">${s.label}</span>
+          </div>
+          <div class="order-card-product">
+            <strong>${escapeHtml(o.product_name || '-')}</strong>
+            <span class="order-card-qty">× ${Number(o.quantity) || 1}</span>
+          </div>
+          <div class="order-card-price">${formatPrice(o.total_price)}</div>
+          <dl class="order-card-info">
+            <dt>받는 분</dt><dd>${escapeHtml(o.recipient_name || '-')}</dd>
+            <dt>연락처</dt><dd>${escapeHtml(o.recipient_phone || '-')}</dd>
+            <dt>주소</dt>
+            <dd>
+              ${o.recipient_zipcode ? `<small>[${escapeHtml(o.recipient_zipcode)}]</small> ` : ''}
+              ${escapeHtml(o.recipient_address || '-')}
+              ${o.recipient_address_detail ? `<br><small>${escapeHtml(o.recipient_address_detail)}</small>` : ''}
+            </dd>
+            ${o.delivery_memo ? `<dt>배송 메모</dt><dd>${escapeHtml(o.delivery_memo)}</dd>` : ''}
+          </dl>
+        </div>
+      `;
+    }).join('');
+
+    lookupResultEl.classList.remove('hidden');
+    lookupResultEl.innerHTML = `
+      <div class="lookup-result-head">
+        <strong>총 ${items.length}건의 주문</strong>
+        ${meta && meta.total_matches > items.length ? `<small>(전체 ${meta.total_matches}건 중 최근 ${items.length}건)</small>` : ''}
+      </div>
+      ${verifyNote}
+      <div class="order-card-list">${cards}</div>
+    `;
+  }
+
+  async function lookupOrders() {
+    clearLookupStatus();
+    if (lookupResultEl) lookupResultEl.classList.add('hidden');
+
+    const name = (lookupNameEl?.value || '').trim();
+    const phone4 = (lookupPhone4El?.value || '').trim();
+
+    if (!name) {
+      showLookupStatus('받는 분 성함을 입력해 주세요.', 'error');
+      lookupNameEl?.focus();
+      return;
+    }
+    if (phone4 && !/^\d{4}$/.test(phone4)) {
+      showLookupStatus('휴대폰 뒷 4자리는 숫자 4자리로 입력해 주세요.', 'error');
+      lookupPhone4El?.focus();
+      return;
+    }
+
+    lookupBtn.disabled = true;
+    const originalLabel = lookupBtn.textContent;
+    lookupBtn.textContent = '조회 중...';
+
+    try {
+      const params = new URLSearchParams({ name });
+      if (phone4) params.set('phone4', phone4);
+      const res = await fetch('/api/orders/lookup?' + params.toString());
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showLookupStatus(data.error || '조회에 실패했습니다.', 'error');
+        return;
+      }
+      renderLookupResults(data.data, data.meta);
+    } catch (e) {
+      console.error('lookupOrders error:', e);
+      showLookupStatus('네트워크 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.', 'error');
+    } finally {
+      lookupBtn.disabled = false;
+      lookupBtn.textContent = originalLabel;
+    }
+  }
+
+  if (lookupBtn) lookupBtn.addEventListener('click', lookupOrders);
+  // Enter 키로도 조회
+  [lookupNameEl, lookupPhone4El].forEach(el => {
+    if (!el) return;
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        lookupOrders();
+      }
+    });
+  });
+  // 휴대폰 뒷 4자리는 숫자만
+  if (lookupPhone4El) {
+    lookupPhone4El.addEventListener('input', (e) => {
+      e.target.value = (e.target.value || '').replace(/\D/g, '').slice(0, 4);
+    });
+  }
+
   // ── 초기화 ──
   loadProducts();
 })();
