@@ -99,8 +99,32 @@
   }
 
   // ── 상품권 등록 (다중) ──
+  // 합계 잔액: 같은 시리얼이 어떤 이유로 중복 등록되더라도
+  // 잔액이 부풀려지지 않도록 시리얼 기준으로 unique 합산한다.
   function getTotalBalance() {
-    return state.vouchers.reduce((sum, v) => sum + (v.balance || 0), 0);
+    const seen = new Set();
+    let sum = 0;
+    for (const v of state.vouchers) {
+      const key = String(v.serial || '').toUpperCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      sum += (v.balance || 0);
+    }
+    return sum;
+  }
+
+  // state.vouchers 에서 시리얼 중복을 제거한 사본을 반환
+  // (어떤 경로로든 중복이 들어왔을 경우의 방어막)
+  function getUniqueVouchers() {
+    const seen = new Set();
+    const out = [];
+    for (const v of state.vouchers) {
+      const key = String(v.serial || '').toUpperCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(v);
+    }
+    return out;
   }
 
   // 상품권 시리얼 정규화
@@ -132,8 +156,9 @@
       showVoucherStatus('상품권 번호를 입력해주세요. (예: AF93875)', 'error');
       return;
     }
-    // 중복 등록 방지
-    if (state.vouchers.some(v => v.serial === serial)) {
+    // 중복 등록 방지 (대소문자/공백 무시한 정규화 비교)
+    const serialKey = String(serial).toUpperCase().trim();
+    if (state.vouchers.some(v => String(v.serial || '').toUpperCase().trim() === serialKey)) {
       showVoucherStatus(`이미 등록된 상품권입니다: ${serial}`, 'error');
       return;
     }
@@ -145,6 +170,12 @@
       }
       if (voucher.is_deleted) {
         showVoucherStatus(`사용할 수 없는 상품권입니다.`, 'error');
+        return;
+      }
+      // 서버 응답의 serial 로 한 번 더 중복 체크 (race condition 방어)
+      const respSerialKey = String(voucher.serial || '').toUpperCase().trim();
+      if (respSerialKey && state.vouchers.some(v => String(v.serial || '').toUpperCase().trim() === respSerialKey)) {
+        showVoucherStatus(`이미 등록된 상품권입니다: ${voucher.serial}`, 'error');
         return;
       }
       state.vouchers.push(voucher);
@@ -170,6 +201,12 @@
   }
 
   function renderVoucherList() {
+    // 시리얼 기준 중복 제거 후 표시 (방어막)
+    const uniq = getUniqueVouchers();
+    if (uniq.length !== state.vouchers.length) {
+      // state 가 중복을 머금고 있으면 정리
+      state.vouchers = uniq;
+    }
     if (state.vouchers.length === 0) {
       voucherListWrap.classList.add('hidden');
       voucherListEl.innerHTML = '';
