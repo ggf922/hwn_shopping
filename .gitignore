@@ -5,3 +5,10 @@ public/uploads/*
 *.log
 .DS_Store
 .env
+.env.*
+!.env.example
+!**/.env.*.example
+migration/.env.migration
+backups/snapshot_*/
+backups/*.tar.gz
+backups/*.sha256
