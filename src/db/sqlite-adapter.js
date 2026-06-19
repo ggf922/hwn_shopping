@@ -82,6 +82,14 @@ db.exec(`
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  -- 관리자 설정 (key-value)
+  -- 현재는 비밀번호 해시 저장 용도. 향후 다른 설정도 같은 테이블에 보관 가능.
+  CREATE TABLE IF NOT EXISTS admin_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // 발권 금액 시드
@@ -566,11 +574,33 @@ const orders = {
     },
 };
 
+// ─────────────────────────────────────────────
+// 관리자 설정 (key-value)
+// ─────────────────────────────────────────────
+const adminSettings = {
+    async get(key) {
+        const row = db.prepare('SELECT value FROM admin_settings WHERE key = ?').get(key);
+        return row ? row.value : null;
+    },
+
+    async set(key, value) {
+        db.prepare(`
+            INSERT INTO admin_settings (key, value, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = CURRENT_TIMESTAMP
+        `).run(key, String(value));
+        return true;
+    },
+};
+
 module.exports = {
     products,
     vouchers,
     voucherAmounts,
     orders,
+    adminSettings,
     // 진단/유틸용 — Supabase 어댑터에는 없음
     _raw: db,
     _type: 'sqlite',

@@ -572,11 +572,57 @@ const orders = {
     },
 };
 
+// ─────────────────────────────────────────────
+// 관리자 설정 (key-value)
+//   - admin_settings 테이블 필요. Supabase SQL 에디터에서 1회 실행:
+//     CREATE TABLE IF NOT EXISTS public.admin_settings (
+//       key text PRIMARY KEY,
+//       value text NOT NULL,
+//       updated_at timestamptz NOT NULL DEFAULT now()
+//     );
+//   - 테이블이 아직 없는 경우 get() 은 null을 반환하고
+//     set() 은 에러를 throw 합니다 (운영자가 SQL 실행 필요).
+// ─────────────────────────────────────────────
+const adminSettings = {
+    async get(key) {
+        try {
+            const { data, error } = await supabase
+                .from('admin_settings')
+                .select('value')
+                .eq('key', key)
+                .maybeSingle();
+            if (error) {
+                // 테이블 미생성 등 — 환경변수 fallback 으로 동작하도록 null 반환
+                console.warn('[adminSettings.get] ', error.message);
+                return null;
+            }
+            return data ? data.value : null;
+        } catch (e) {
+            console.warn('[adminSettings.get] ', e.message);
+            return null;
+        }
+    },
+
+    async set(key, value) {
+        const { error } = await supabase
+            .from('admin_settings')
+            .upsert(
+                { key, value: String(value), updated_at: new Date().toISOString() },
+                { onConflict: 'key' }
+            );
+        if (error) {
+            throw new Error(`admin_settings 저장 실패: ${error.message} (Supabase에 admin_settings 테이블이 있는지 확인하세요)`);
+        }
+        return true;
+    },
+};
+
 module.exports = {
     products,
     vouchers,
     voucherAmounts,
     orders,
+    adminSettings,
     _raw: supabase,
     _type: 'supabase',
 };
