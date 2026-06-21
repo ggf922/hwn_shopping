@@ -52,6 +52,19 @@ button { cursor: pointer; font-family: inherit; }
   justify-content: space-between;
   padding: 16px 20px;
 }
+.logo-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+}
+.header-logo-img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
+}
 .logo {
   font-size: 1.8rem;
   font-weight: 800;
@@ -86,11 +99,11 @@ button { cursor: pointer; font-family: inherit; }
   overflow: hidden;
   background: #0a0a0a; /* 동영상 로딩 전 폴백 */
   color: var(--gold);
-  padding: 120px 0 110px;
+  padding: 80px 0 90px;
   text-align: center;
   border-bottom: 2px solid var(--gold);
   isolation: isolate; /* 자식 absolute 요소의 z-index 격리 */
-  min-height: 360px;
+  min-height: 480px;
 }
 .hero-video {
   position: absolute;
@@ -116,6 +129,25 @@ button { cursor: pointer; font-family: inherit; }
 .hero-content {
   position: relative;
   z-index: 1;
+}
+.hero-logo-img {
+  display: block;
+  width: 220px;
+  height: 220px;
+  margin: 0 auto 18px;
+  object-fit: contain;
+  /* 어두운 배경 위에서 로고가 더 돋보이도록 부드러운 글로우 */
+  filter:
+    drop-shadow(0 0 18px rgba(255, 215, 130, 0.35))
+    drop-shadow(0 6px 18px rgba(0, 0, 0, 0.55));
+  animation: hero-logo-float 6s ease-in-out infinite;
+}
+@keyframes hero-logo-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-logo-img { animation: none; }
 }
 .hero h2 {
   font-size: 2.4rem;
@@ -1093,15 +1125,24 @@ button { cursor: pointer; font-family: inherit; }
 
 /* 반응형 */
 @media (max-width: 768px) {
-  .hero { padding: 80px 0 70px; min-height: 280px; }
+  .hero { padding: 50px 0 60px; min-height: 360px; }
+  .hero-logo-img { width: 150px; height: 150px; margin-bottom: 14px; }
   .hero h2 { font-size: 1.6rem; }
   .hero p { font-size: 0.95rem; }
   .header-inner { flex-direction: column; gap: 12px; }
+  .header-logo-img { width: 44px; height: 44px; }
+  .logo { font-size: 1.5rem; }
   .data-table { font-size: 0.85rem; }
   .data-table th, .data-table td { padding: 8px 6px; }
   .toolbar { flex-direction: column; align-items: stretch; }
   .modal-content.modal-lg { max-width: 100%; }
   .login-card { padding: 30px 22px; }
+}
+@media (max-width: 480px) {
+  .hero-logo-img { width: 120px; height: 120px; }
+  .header-logo-img { width: 38px; height: 38px; }
+  .logo { font-size: 1.3rem; }
+  .logo span { font-size: 0.6rem; letter-spacing: 2px; }
 }
 
 /* ─────────────────────────────────────────────
