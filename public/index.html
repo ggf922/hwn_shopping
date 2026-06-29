@@ -306,6 +306,21 @@
       display:block;font-size:22px;font-weight:800;color:#8B0000;letter-spacing:-.5px;margin-bottom:4px;
     }
     .rn-highlight .rn-date-sub{font-size:13px;color:#666;}
+    .rn-preorder{
+      display:inline-block;background:linear-gradient(135deg,#8B0000,#B22222);
+      color:#fff;font-weight:800;font-size:15px;letter-spacing:-.3px;
+      padding:8px 18px;border-radius:999px;margin:0 0 10px;
+      box-shadow:0 4px 12px rgba(139,0,0,.3);
+      animation:rnPulse 1.8s ease-in-out infinite;
+    }
+    .rn-preorder::before{content:"✅ ";}
+    @keyframes rnPulse{
+      0%,100%{transform:scale(1);}
+      50%{transform:scale(1.04);}
+    }
+    @media (prefers-reduced-motion: reduce){
+      .rn-preorder{animation:none;}
+    }
     .rn-thanks{
       margin-top:16px;padding-top:16px;border-top:1px dashed #ddd;
       color:#555;font-size:14px;text-align:center;
@@ -351,6 +366,7 @@
           현재 <strong style="color:#8B0000;">일시 품절</strong> 되었습니다.
         </p>
         <div class="rn-highlight">
+          <div class="rn-preorder">사전 예약 주문은 받고 있습니다!</div>
           <span class="rn-date">7월 7일(화)부터 배송 재개</span>
           <span class="rn-date-sub">신선하게 준비하여 순차 발송해 드립니다</span>
         </div>
