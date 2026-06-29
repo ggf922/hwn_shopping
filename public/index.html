@@ -255,5 +255,153 @@
   </footer>
 
   <script src="/js/shop.js?v=18"></script>
+
+  <!-- ───────── 한입등심살 품절/재입고 안내 팝업 ───────── -->
+  <style>
+    #restock-notice-overlay{
+      position:fixed;inset:0;background:rgba(0,0,0,.6);
+      display:none;align-items:center;justify-content:center;
+      z-index:9999;padding:20px;
+      animation:rnFade .25s ease-out;
+    }
+    #restock-notice-overlay.show{display:flex;}
+    @keyframes rnFade{from{opacity:0;}to{opacity:1;}}
+    @keyframes rnSlide{from{opacity:0;transform:translateY(20px) scale(.96);}to{opacity:1;transform:none;}}
+    .rn-modal{
+      background:#fff;border-radius:16px;max-width:440px;width:100%;
+      box-shadow:0 20px 60px rgba(0,0,0,.35);
+      overflow:hidden;animation:rnSlide .3s ease-out;
+      max-height:90vh;display:flex;flex-direction:column;
+    }
+    .rn-header{
+      background:linear-gradient(135deg,#8B0000 0%,#B22222 100%);
+      color:#fff;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;
+    }
+    .rn-header h3{margin:0;font-size:18px;font-weight:700;letter-spacing:-.3px;}
+    .rn-close{
+      background:transparent;border:none;color:#fff;font-size:22px;cursor:pointer;
+      padding:0;width:30px;height:30px;border-radius:50%;line-height:1;
+      transition:background .15s;
+    }
+    .rn-close:hover{background:rgba(255,255,255,.2);}
+    .rn-body{padding:24px;overflow-y:auto;color:#333;line-height:1.7;font-size:15px;}
+    .rn-product{
+      background:#FAF7F2;border-left:4px solid #B8860B;
+      padding:12px 16px;margin:0 0 16px;border-radius:6px;
+      font-weight:600;color:#2c2c2c;
+    }
+    .rn-highlight{
+      background:#FFF8E1;border:1px solid #F0D78A;border-radius:8px;
+      padding:14px 16px;margin:14px 0;text-align:center;
+    }
+    .rn-highlight .rn-date{
+      display:block;font-size:22px;font-weight:800;color:#8B0000;letter-spacing:-.5px;margin-bottom:4px;
+    }
+    .rn-highlight .rn-date-sub{font-size:13px;color:#666;}
+    .rn-thanks{
+      margin-top:16px;padding-top:16px;border-top:1px dashed #ddd;
+      color:#555;font-size:14px;text-align:center;
+    }
+    .rn-footer{
+      padding:14px 24px 20px;display:flex;gap:10px;align-items:center;justify-content:space-between;
+      background:#FAFAFA;border-top:1px solid #EEE;
+    }
+    .rn-hide-label{display:flex;align-items:center;gap:6px;font-size:13px;color:#666;cursor:pointer;}
+    .rn-hide-label input{cursor:pointer;}
+    .rn-ok{
+      background:linear-gradient(135deg,#8B0000,#B22222);color:#fff;border:none;
+      padding:10px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;
+      transition:transform .12s,box-shadow .15s;
+    }
+    .rn-ok:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(139,0,0,.3);}
+    @media (max-width:480px){
+      .rn-modal{max-width:100%;}
+      .rn-body{padding:20px;font-size:14px;}
+      .rn-header h3{font-size:16px;}
+      .rn-highlight .rn-date{font-size:19px;}
+      .rn-footer{flex-direction:column;align-items:stretch;gap:12px;}
+      .rn-ok{width:100%;}
+    }
+    @media (prefers-reduced-motion: reduce){
+      #restock-notice-overlay,.rn-modal{animation:none;}
+    }
+  </style>
+  <div id="restock-notice-overlay" role="dialog" aria-modal="true" aria-labelledby="rn-title">
+    <div class="rn-modal">
+      <div class="rn-header">
+        <h3 id="rn-title">📢 품절 및 재입고 안내</h3>
+        <button type="button" class="rn-close" aria-label="닫기" onclick="closeRestockNotice()">✕</button>
+      </div>
+      <div class="rn-body">
+        <div class="rn-product">🥩 최고급 한 입 등심살 300g 2개</div>
+        <p>
+          많은 분들의 사랑과 성원 덕분에 <strong>「최고급 한 입 등심살」</strong> 제품이
+          현재 <strong style="color:#8B0000;">일시 품절</strong> 되었습니다.
+        </p>
+        <div class="rn-highlight">
+          <span class="rn-date">7월 7일(화)부터 배송 재개</span>
+          <span class="rn-date-sub">신선하게 준비하여 순차 발송해 드립니다</span>
+        </div>
+        <p>
+          기다려 주시는 동안 불편을 드려 진심으로 죄송합니다.
+          최상의 품질을 유지하기 위해 잠시 시간을 가지고 다시 찾아뵙겠습니다.
+        </p>
+        <div class="rn-thanks">
+          💝 그동안 <strong>하원나라</strong>를 사랑해 주시고<br>
+          제품을 구매해 주신 모든 고객님께<br>
+          <strong style="color:#8B0000;">진심으로 감사드립니다.</strong>
+        </div>
+      </div>
+      <div class="rn-footer">
+        <label class="rn-hide-label">
+          <input type="checkbox" id="rn-hide-today" /> 오늘 하루 보지 않기
+        </label>
+        <button type="button" class="rn-ok" onclick="closeRestockNotice()">확인</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function(){
+      var KEY = 'hwn_restock_notice_hide_until_v1';
+      function shouldShow(){
+        try{
+          var until = parseInt(localStorage.getItem(KEY) || '0', 10);
+          return !until || Date.now() > until;
+        }catch(e){ return true; }
+      }
+      window.closeRestockNotice = function(){
+        var overlay = document.getElementById('restock-notice-overlay');
+        var hide = document.getElementById('rn-hide-today');
+        if(hide && hide.checked){
+          try{ localStorage.setItem(KEY, String(Date.now() + 24*60*60*1000)); }catch(e){}
+        }
+        if(overlay) overlay.classList.remove('show');
+      };
+      function open(){
+        var overlay = document.getElementById('restock-notice-overlay');
+        if(overlay) overlay.classList.add('show');
+      }
+      // 오버레이 빈 곳 클릭 시 닫기
+      document.addEventListener('click', function(e){
+        if(e.target && e.target.id === 'restock-notice-overlay'){ window.closeRestockNotice(); }
+      });
+      // ESC 키로 닫기
+      document.addEventListener('keydown', function(e){
+        if(e.key === 'Escape'){
+          var ov = document.getElementById('restock-notice-overlay');
+          if(ov && ov.classList.contains('show')) window.closeRestockNotice();
+        }
+      });
+      // 페이지 로드 후 잠시 뒤 자동 표시
+      if(shouldShow()){
+        if(document.readyState === 'loading'){
+          document.addEventListener('DOMContentLoaded', function(){ setTimeout(open, 600); });
+        }else{
+          setTimeout(open, 600);
+        }
+      }
+    })();
+  </script>
+  <!-- ───────── /한입등심살 품절/재입고 안내 팝업 ───────── -->
 </body>
 </html>
