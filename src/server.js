@@ -550,7 +550,7 @@ app.put('/api/orders/:id/status', auth.requireAdmin, ah(async (req, res) => {
 }));
 
 // ─────────────────────────────────────────────
-// registerAdminRoutes(app);
+   registerAdminRoutes(app);
 // 페이지 라우트
 // ─────────────────────────────────────────────
 
