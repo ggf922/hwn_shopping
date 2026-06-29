@@ -14,6 +14,8 @@ const db = require('./db');
 const storage = require('./storage');     // 새 추상화 레이어
 const { generateFullSerial, renderVoucherImage } = require('./voucher');
 const auth = require('./auth');
+const registerAdminRoutes = require('./admin-routes');
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -548,6 +550,7 @@ app.put('/api/orders/:id/status', auth.requireAdmin, ah(async (req, res) => {
 }));
 
 // ─────────────────────────────────────────────
+   registerAdminRoutes(app);
 // 페이지 라우트
 // ─────────────────────────────────────────────
 

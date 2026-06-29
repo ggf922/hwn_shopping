@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>하원나라 - 발주서</title>
+  <link rel="stylesheet" href="/css/style.css?v=21" />
+  <link rel="stylesheet" href="/css/dashboard.css?v=1" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <h1 class="logo">하원나라 <span>ADMIN</span></h1>
+      <nav>
+        <a href="/">쇼핑몰</a>
+        <a href="/admin">관리자</a>
+        <a href="/admin/dashboard">결산 대시보드</a>
+        <a href="/admin/po" class="active">발주서</a>
+        <span class="admin-user" id="admin-user-info"></span>
+        <button class="btn btn-secondary btn-sm" id="logout-btn">로그아웃</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container main-content">
+    <div class="dashboard-header">
+      <div>
+        <h2 class="dashboard-title">발주서 생성</h2>
+        <div class="dashboard-sub">매일 오전 8시 ~ 익일 오전 8시 주문을 공급사별로 모아 발주서를 생성합니다.</div>
+      </div>
+    </div>
+
+    <div class="po-help">
+      <strong>📋 발주 기간</strong>: 매일 오전 8시를 기준으로 하루를 끊습니다.
+      <strong>어제 08시 ~ 오늘 08시</strong> = 어제 들어온 주문(밤사이 포함). 기본값입니다.
+    </div>
+
+    <div class="po-toolbar">
+      <button class="filter-pill" data-preset="today_8am">오늘 08시~</button>
+      <button class="filter-pill active" data-preset="yesterday_8am">어제 08시 ~ 오늘 08시</button>
+      <button class="filter-pill" data-preset="day_before">그제 08시 ~ 어제 08시</button>
+      <span style="color: var(--text-faint); font-size: 12px;">또는 직접:</span>
+      <input type="date" id="customDate" class="dashboard-date" />
+      <span style="color: var(--text-faint); font-size: 12px;">→ 다음날 08시</span>
+      <button class="filter-pill" id="applyCustomBtn">적용</button>
+      <span class="filter-spacer"></span>
+      <span class="period-display" id="periodLabel">—</span>
+      <button class="btn btn-secondary btn-sm" id="settingsBtn">⚙️ 공급사 설정</button>
+      <button class="btn btn-primary btn-sm" id="downloadAllBtn">📦 전체 다운로드</button>
+    </div>
+
+    <div id="content">
+      <div class="dashboard-loading" style="position:static;background:transparent">
+        <div class="dashboard-spinner"></div>
+        <span>주문 불러오는 중...</span>
+      </div>
+    </div>
+  </main>
+
+  <div class="po-modal-bg" id="poModal">
+    <div class="po-modal">
+      <div class="po-modal-header">
+        <div class="po-modal-title" id="poModalTitle">—</div>
+        <div class="po-modal-actions">
+          <button class="btn btn-secondary btn-sm" id="copyTableBtn">📋 표 복사</button>
+          <button class="btn btn-secondary btn-sm" id="copyTextBtn">📋 텍스트 복사</button>
+          <button class="btn btn-primary btn-sm" id="downloadXlsxBtn">⬇ XLSX</button>
+          <button class="po-modal-close" id="modalCloseBtn">✕</button>
+        </div>
+      </div>
+      <div class="po-modal-body">
+        <div class="copy-status" id="copyStatus"></div>
+        <div id="poTableContainer"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="po-modal-bg" id="settingsModal">
+    <div class="po-modal" style="width:800px">
+      <div class="po-modal-header">
+        <div class="po-modal-title">공급사 · 상품 매핑 설정</div>
+        <div class="po-modal-actions">
+          <button class="po-modal-close" id="settingsCloseBtn">✕</button>
+        </div>
+      </div>
+      <div class="po-modal-body">
+        <h3 style="margin:0 0 8px;font-size:14px">새 공급사 추가</h3>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <input type="text" id="newSupplierName" placeholder="공급사 이름" style="flex:1;padding:8px 10px;border:1px solid var(--border-soft);border-radius:6px;background:var(--bg-soft)" />
+          <select id="newSupplierFormat" style="padding:8px 10px;border:1px solid var(--border-soft);border-radius:6px;background:var(--bg-soft)">
+            <option value="standard">표준 (7컬럼)</option>
+            <option value="nangman">낭만식 (12컬럼)</option>
+          </select>
+          <button class="btn btn-primary btn-sm" id="addSupplierBtn">추가</button>
+        </div>
+        <h3 style="margin:16px 0 8px;font-size:14px">상품 → 공급사 매핑</h3>
+        <p style="color:var(--text-muted);font-size:12px;margin:0 0 12px">각 상품의 공급사를 변경할 수 있습니다. 변경은 즉시 저장됩니다.</p>
+        <div class="settings-list" id="settingsList"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/po.js?v=1"></script>
+</body>
+</html>
