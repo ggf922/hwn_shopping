@@ -391,8 +391,17 @@
   </div>
   <script>
     (function(){
+      // ┌──────────────────────────────────────────────────────────────┐
+      // │  🔔 팝업 켜기/끄기 스위치 (RESTOCK_NOTICE_ENABLED)           │
+      // │  - true  : 사이트 접속 시 팝업 자동 표시                     │
+      // │  - false : 팝업 완전 비활성화 (마크업/스타일은 그대로 보존)  │
+      // │  나중에 팝업을 다시 사용하려면 아래 값을 true 로 바꾸면 됩니다.│
+      // └──────────────────────────────────────────────────────────────┘
+      var RESTOCK_NOTICE_ENABLED = false;
+
       var KEY = 'hwn_restock_notice_hide_until_v1';
       function shouldShow(){
+        if(!RESTOCK_NOTICE_ENABLED) return false;
         try{
           var until = parseInt(localStorage.getItem(KEY) || '0', 10);
           return !until || Date.now() > until;
