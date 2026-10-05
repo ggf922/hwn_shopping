@@ -1,5 +1,5 @@
 {
-  "name": "k-wealth-mall",
+  "name": "hawonnara",
   "version": "1.0.0",
   "description": "K-웰스몰 상품권 발권 및 쇼핑몰 시스템",
   "main": "src/server.js",
