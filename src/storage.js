@@ -1,5 +1,5 @@
 /**
- * 하원나라 - 이미지 Storage 추상화
+ * K-웰스몰 - 이미지 Storage 추상화
  *
  * 두 가지 모드를 지원:
  *   1. Supabase Storage 모드 (production, USE_SUPABASE_STORAGE=true 또는 USE_SUPABASE=true)
