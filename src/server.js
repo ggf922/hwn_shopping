@@ -1,5 +1,5 @@
 /**
- * 하원나라 상품권 + 쇼핑몰 서버 (어댑터 패턴 적용)
+ * K-웰스몰 상품권 + 쇼핑몰 서버 (어댑터 패턴 적용)
  *
  * 환경변수:
  *   USE_SUPABASE=true          → Supabase DB 모드 (Vercel/Production)
@@ -576,7 +576,7 @@ app.use((err, req, res, next) => {
 // Vercel 등 외부 환경에서는 listen 하지 않고 app만 export
 if (require.main === module) {
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🎁 하원나라 서버 실행 중 (${db._type || 'unknown'} 모드)`);
+    console.log(`\n🎁 K-웰스몰 서버 실행 중 (${db._type || 'unknown'} 모드)`);
     console.log(`   - 쇼핑몰:   http://localhost:${PORT}/`);
     console.log(`   - 관리자:   http://localhost:${PORT}/admin\n`);
   });

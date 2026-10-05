@@ -1,4 +1,4 @@
-// 하원나라 결산 대시보드 - 프론트엔드 로직
+// K-웰스몰 결산 대시보드 - 프론트엔드 로직
 // /admin/dashboard 에서 동작. 기존 admin_token (localStorage) 인증을 그대로 씁니다.
 (function () {
   'use strict';
