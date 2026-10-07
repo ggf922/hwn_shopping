@@ -128,31 +128,37 @@
   }
 
   // 상품권 시리얼 정규화
-  // - 사용자가 뒷부분(예: "CU88538")만 입력 → "HWN-2026-CU88538"로 자동 보정
-  // - 사용자가 전체("HWN-2026-CU88538") 입력 → 그대로 사용
+  // - 신규 prefix: "WELLS-2026-" (K-웰스몰 브랜드)
+  // - 하위 호환: 기존 발행된 "HWN-2026-" 상품권도 그대로 수용
+  // - 사용자가 뒷부분(예: "CU88538")만 입력 → "WELLS-2026-CU88538"로 자동 보정
+  // - 사용자가 전체 시리얼 입력 → 그대로 사용 (WELLS/HWN 모두)
   // - 소문자/공백/하이픈 누락 등도 관용적으로 처리
   function normalizeSerial(raw) {
-    const VOUCHER_PREFIX = 'HWN-2026-';
+    const NEW_PREFIX = 'WELLS-2026-';
+    const LEGACY_PREFIX = 'HWN-2026-';
     if (!raw) return '';
     // 공백 제거 + 대문자화
     let s = String(raw).replace(/\s+/g, '').toUpperCase();
-    // 이미 풀 시리얼이면 그대로
-    if (s.startsWith(VOUCHER_PREFIX)) return s;
-    // "HWN2026CU88538" 처럼 하이픈만 빠진 경우 보정
+    // 이미 풀 시리얼(WELLS 또는 HWN)이면 그대로
+    if (s.startsWith(NEW_PREFIX)) return s;
+    if (s.startsWith(LEGACY_PREFIX)) return s;
+    // "WELLS2026CU88538" / "HWN2026CU88538" 처럼 하이픈만 빠진 경우 보정
     const noHyphen = s.replace(/-/g, '');
-    if (noHyphen.startsWith('HWN2026') && noHyphen.length >= 7) {
-      const suffix = noHyphen.slice(7); // "HWN2026" 이후
-      return VOUCHER_PREFIX + suffix;
+    if (noHyphen.startsWith('WELLS2026') && noHyphen.length >= 9) {
+      return NEW_PREFIX + noHyphen.slice(9);
     }
-    // 그 외(접미사만 입력) → prefix 결합
+    if (noHyphen.startsWith('HWN2026') && noHyphen.length >= 7) {
+      return LEGACY_PREFIX + noHyphen.slice(7);
+    }
+    // 그 외(접미사만 입력) → 신규 prefix 결합
     // 사용자가 실수로 "-CU88538" 같이 입력한 경우 앞 하이픈 제거
     s = s.replace(/^-+/, '');
-    return VOUCHER_PREFIX + s;
+    return NEW_PREFIX + s;
   }
 
   async function addVoucher() {
     const serial = normalizeSerial(voucherInput.value);
-    if (!serial || serial === 'HWN-2026-') {
+    if (!serial || serial === 'WELLS-2026-' || serial === 'HWN-2026-') {
       showVoucherStatus('상품권 번호를 입력해주세요. (예: AF93875)', 'error');
       return;
     }
@@ -411,17 +417,22 @@
   voucherInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') addVoucher();
   });
-  // 사용자가 전체 시리얼("HWN-2026-CU88538")을 붙여넣어도
+  // 사용자가 전체 시리얼("WELLS-2026-CU88538" / "HWN-2026-CU88538")을 붙여넣어도
   // prefix 부분은 자동 제거하여 뒷부분만 입력란에 남도록 함
   voucherInput.addEventListener('input', (e) => {
     const val = e.target.value;
     const upper = val.toUpperCase();
-    // 전체 시리얼이 입력된 경우 prefix 제거
-    if (upper.startsWith('HWN-2026-')) {
+    const noHyphen = upper.replace(/-/g, '');
+    // 전체 시리얼이 입력된 경우 prefix 제거 (WELLS/HWN 모두)
+    if (upper.startsWith('WELLS-2026-')) {
+      e.target.value = upper.slice('WELLS-2026-'.length);
+    } else if (upper.startsWith('HWN-2026-')) {
       e.target.value = upper.slice('HWN-2026-'.length);
-    } else if (upper.replace(/-/g, '').startsWith('HWN2026') && upper.replace(/-/g, '').length > 7) {
+    } else if (noHyphen.startsWith('WELLS2026') && noHyphen.length > 9) {
       // 하이픈이 일부 빠진 경우도 처리
-      e.target.value = upper.replace(/-/g, '').slice(7);
+      e.target.value = noHyphen.slice(9);
+    } else if (noHyphen.startsWith('HWN2026') && noHyphen.length > 7) {
+      e.target.value = noHyphen.slice(7);
     } else if (val !== upper) {
       // 단순히 소문자 → 대문자 변환 (커서 위치 유지)
       const pos = e.target.selectionStart;

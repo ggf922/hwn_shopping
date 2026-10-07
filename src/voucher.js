@@ -61,11 +61,12 @@ function generateSerialCode() {
 }
 
 /**
- * 풀 시리얼 코드 생성 (HWN-YYYY-XXNNNNN)
+ * 풀 시리얼 코드 생성 (WELLS-YYYY-XXNNNNN)
+ * K-웰스몰 브랜드. 하위 호환성을 위해 기존 HWN-2026-XXXXX 상품권도 유효.
  */
 function generateFullSerial() {
   const year = new Date().getFullYear();
-  return `HWN-${year}-${generateSerialCode()}`;
+  return `WELLS-${year}-${generateSerialCode()}`;
 }
 
 /**
