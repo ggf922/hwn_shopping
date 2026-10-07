@@ -4,7 +4,7 @@
   "description": "K-웰스몰 상품권 발권 및 쇼핑몰 시스템",
   "main": "src/server.js",
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "start": "node src/server.js",
