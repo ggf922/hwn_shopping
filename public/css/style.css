@@ -117,12 +117,16 @@ button { cursor: pointer; font-family: inherit; }
 .hero-overlay {
   position: absolute;
   inset: 0;
-  /* 동영상 위에 어두운 그라데이션 — 텍스트 가독성 확보 */
+  /* 동영상 위에 어두운 그라데이션 — 텍스트 가독성 확보
+     + K-웰스몰 테마 네이비 톤 반영 */
   background:
-    linear-gradient(135deg,
-      rgba(10,10,10,0.78) 0%,
-      rgba(26,26,26,0.62) 50%,
-      rgba(42,34,24,0.78) 100%);
+    radial-gradient(ellipse at center,
+      rgba(10,14,42,0.55) 0%,
+      rgba(10,14,42,0.78) 100%),
+    linear-gradient(180deg,
+      rgba(5,5,15,0.72) 0%,
+      rgba(10,14,30,0.60) 45%,
+      rgba(15,10,35,0.82) 100%);
   z-index: -1;
   pointer-events: none;
 }
