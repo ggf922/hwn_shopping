@@ -1,11 +1,24 @@
 /**
  * 상품권 일련번호 생성 및 이미지 생성 모듈
  */
-const { createCanvas, loadImage, registerFont } = require('canvas');
 const path = require('path');
 const fs = require('fs');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', 'public', 'images', 'voucher-template.png');
+
+// canvas 모듈 안전 로딩 (설치 실패 시에도 서버는 뜨도록)
+let createCanvas, loadImage, registerFont;
+let canvasAvailable = false;
+try {
+  const canvasMod = require('canvas');
+  createCanvas = canvasMod.createCanvas;
+  loadImage = canvasMod.loadImage;
+  registerFont = canvasMod.registerFont;
+  canvasAvailable = true;
+} catch (e) {
+  console.warn('[Voucher] ⚠️  canvas 모듈 로드 실패 — 상품권 이미지 생성 비활성. 나머지 기능은 정상 작동.');
+  console.warn('[Voucher]    상세:', e.message);
+}
 
 // 한글 폰트 등록 시도
 // 1순위: 프로젝트 번들 폰트 (Vercel/Production 에서도 동작)
@@ -20,15 +33,17 @@ const KOREAN_FONT_CANDIDATES = [
 ];
 
 let KOREAN_FONT_FAMILY = 'sans-serif';
-for (const fp of KOREAN_FONT_CANDIDATES) {
-  if (fs.existsSync(fp)) {
-    try {
-      registerFont(fp, { family: 'KoreanFont' });
-      KOREAN_FONT_FAMILY = 'KoreanFont';
-      console.log('[Voucher] 한글 폰트 등록:', fp);
-      break;
-    } catch (e) {
-      // 무시
+if (canvasAvailable) {
+  for (const fp of KOREAN_FONT_CANDIDATES) {
+    if (fs.existsSync(fp)) {
+      try {
+        registerFont(fp, { family: 'KoreanFont' });
+        KOREAN_FONT_FAMILY = 'KoreanFont';
+        console.log('[Voucher] 한글 폰트 등록:', fp);
+        break;
+      } catch (e) {
+        // 무시
+      }
     }
   }
 }
@@ -58,6 +73,9 @@ function generateFullSerial() {
  * - 템플릿 이미지 위에 일련번호와 금액을 오버레이
  */
 async function renderVoucherImage({ serial, amount }) {
+  if (!canvasAvailable) {
+    throw new Error('canvas 모듈이 설치되지 않아 상품권 이미지를 생성할 수 없습니다. 서버 로그를 확인하세요.');
+  }
   const template = await loadImage(TEMPLATE_PATH);
   const W = template.width;
   const H = template.height;
