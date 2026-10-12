@@ -97,7 +97,7 @@ db.exec(`
     try {
         const cnt = db.prepare('SELECT COUNT(*) AS c FROM voucher_amounts').get().c;
         if (cnt === 0) {
-            const defaults = [10000, 30000, 50000, 70000, 100000, 140000, 144000, 200000, 300000, 500000, 1000000];
+            const defaults = [30000, 50000, 100000, 200000, 300000, 500000];
             const insert = db.prepare('INSERT INTO voucher_amounts (amount, sort_order, is_active) VALUES (?, ?, 1)');
             const tx = db.transaction(() => {
                 defaults.forEach((amt, idx) => insert.run(amt, idx + 1));
