@@ -70,8 +70,17 @@ function generateFullSerial() {
 }
 
 /**
- * 상품권 이미지 PNG 버퍼 생성
- * - 템플릿 이미지 위에 일련번호와 금액을 오버레이
+ * K-웰스몰 상품권 이미지 PNG 버퍼 생성
+ *
+ * 템플릿: public/images/voucher-template.png (K-웰스몰 디자인, 2026-10 신규)
+ *   - 중앙 금액 자리, 등록코드 박스, 바코드 아래, 좌하단 No. 모두 빈 상태
+ *   - 그 위에 금액(센터), 등록코드, 바코드숫자, No.번호만 그려 넣음
+ *
+ * 템플릿 레이아웃 좌표 (좌표는 전체 크기에 대한 비율 %):
+ *   • AMOUNT (중앙 금액):   X 33~67%,  Y 34~70%  (center 50%, 52%)
+ *   • CODE_BOX (등록코드):  X 33.4~66.4%, Y 77.8~85.8% (center 49.9%, 81.8%)
+ *   • BARCODE_NUM (바코드 아래): X 70.5~94.5%, Y 87.8~92.5% (center 82.5%, 90.1%)
+ *   • NO_LABEL (좌하단 No.): X 4.8~20%, Y 86~91% (center 12.4%, 88.5%)
  */
 async function renderVoucherImage({ serial, amount }) {
   if (!canvasAvailable) {
@@ -88,93 +97,68 @@ async function renderVoucherImage({ serial, amount }) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  /**
-   * 원본 텍스트 위치 (이미지 정밀 분석 결과):
-   *  - "PREMIUM GIFT VOUCHER": Y 39.2%~50.9%
-   *  - "100,000원":            Y 53.0%~75.7%  (X 32.9%~70.0%)
-   *  - "HWN-2026-0000001":     Y 85.3%~92.2%
-   *
-   * 새 박스는 원본 텍스트보다 충분히 크게 잡아서, 가장자리 페이드 구역에서도
-   * 원본 텍스트가 비치지 않도록 함 (완전 불투명 영역이 원본 텍스트 전체를 덮음).
-   */
-
-  // ── 1. 금액 영역: 기존 "100,000원" 완전 덮어쓰기 ──
-  // 원본 텍스트: Y 53~75.7%. 박스는 Y 48~80%로 잡고, 페이드는 상하 8%만 사용
-  // → 완전 불투명 영역(56~72% 사이)만으로도 원본 텍스트 전체를 덮음
+  // ── 1. 금액 (중앙 큰 글씨) ──
+  // "50,000P" 형식 (단위: P = 포인트/원)
+  // 참조 디자인은 "50,000P"이지만, 사용자 익숙성 위해 "50,000원"으로 표기
   const amountText = `${amount.toLocaleString('ko-KR')}원`;
-  const amountBoxY = Math.round(H * 0.48);
-  const amountBoxH = Math.round(H * 0.32); // 48% ~ 80%
-  const amountBoxX = Math.round(W * 0.10);
-  const amountBoxW = Math.round(W * 0.80); // 10% ~ 90%
+  const amountCenterX = W * 0.50;
+  const amountCenterY = H * 0.52;
 
-  drawOverlayBox(ctx, amountBoxX, amountBoxY, amountBoxW, amountBoxH);
+  // 금색 그라데이션
+  const grad = ctx.createLinearGradient(0, amountCenterY - H * 0.10, 0, amountCenterY + H * 0.10);
+  grad.addColorStop(0, '#F5D98A');   // 밝은 상단
+  grad.addColorStop(0.5, '#C5A059'); // 중간 금색
+  grad.addColorStop(1, '#8B6914');   // 어두운 하단
+  ctx.fillStyle = grad;
 
-  // 금색 그라데이션 텍스트 (영역 중심에 배치)
-  const amountCenterY = amountBoxY + amountBoxH / 2;
-  const textGrad = ctx.createLinearGradient(0, amountCenterY - H * 0.08, 0, amountCenterY + H * 0.08);
-  textGrad.addColorStop(0, '#fff3b0');
-  textGrad.addColorStop(0.5, '#e6b800');
-  textGrad.addColorStop(1, '#a67c00');
+  // 폰트 크기: 템플릿 높이의 약 18%
+  const amountFontSize = Math.round(H * 0.18);
+  ctx.font = `bold ${amountFontSize}px "${KOREAN_FONT_FAMILY}"`;
 
-  ctx.font = `bold ${Math.round(H * 0.16)}px "${KOREAN_FONT_FAMILY}"`;
-  ctx.fillStyle = textGrad;
-  ctx.shadowColor = 'rgba(0,0,0,0.8)';
-  ctx.shadowBlur = 8;
-  ctx.fillText(amountText, W / 2, amountCenterY);
+  // 부드러운 그림자 (금속 효과)
+  ctx.shadowColor = 'rgba(139, 105, 20, 0.35)';
+  ctx.shadowBlur = Math.round(H * 0.012);
+  ctx.shadowOffsetY = Math.round(H * 0.004);
+  ctx.fillText(amountText, amountCenterX, amountCenterY);
   ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
 
-  // ── 2. 일련번호 영역: 기존 시리얼 완전 덮어쓰기 ──
-  // 원본 위치: Y 85.3%~92.2%. 박스는 Y 82%~96%로 크게 잡음
-  const serialBoxY = Math.round(H * 0.82);
-  const serialBoxH = Math.round(H * 0.14); // 82% ~ 96%
-  const serialBoxX = Math.round(W * 0.15);
-  const serialBoxW = Math.round(W * 0.70); // 15% ~ 85%
+  // ── 2. 등록코드 박스 (중앙 하단) ──
+  // "등록코드 : WELLS-2026-XXXXX" 형식
+  const codeCenterX = W * 0.499;
+  const codeCenterY = H * 0.818;
+  const codeText = `등록코드 : ${serial}`;
+  const codeFontSize = Math.round(H * 0.038);
+  ctx.font = `bold ${codeFontSize}px "${KOREAN_FONT_FAMILY}"`;
+  ctx.fillStyle = '#1B3F2E'; // 다크 포레스트 그린
+  ctx.fillText(codeText, codeCenterX, codeCenterY);
 
-  drawOverlayBox(ctx, serialBoxX, serialBoxY, serialBoxW, serialBoxH);
+  // ── 3. 바코드 아래 숫자 ──
+  // 바코드 밑에 사람이 읽을 수 있는 코드 표시
+  const barcodeCenterX = W * 0.825;
+  const barcodeCenterY = H * 0.901;
+  const barcodeFontSize = Math.round(H * 0.028);
+  ctx.font = `${barcodeFontSize}px "${KOREAN_FONT_FAMILY}"`;
+  ctx.fillStyle = '#333333';
+  ctx.fillText(serial, barcodeCenterX, barcodeCenterY);
 
-  ctx.font = `bold ${Math.round(H * 0.05)}px "${KOREAN_FONT_FAMILY}"`;
-  ctx.fillStyle = '#d4b465';
-  ctx.fillText(serial, W / 2, serialBoxY + serialBoxH / 2);
+  // ── 4. 좌하단 No. (일련번호 표기) ──
+  // "No. 50000-2026-0910-NNNNNN" 형식 (장식용 번호)
+  const noCenterX = W * 0.124;
+  const noCenterY = H * 0.885;
+  const noFontSize = Math.round(H * 0.026);
+  ctx.font = `${noFontSize}px "${KOREAN_FONT_FAMILY}"`;
+  ctx.fillStyle = '#1B3F2E';
+  // amount로부터 숫자 코드 생성 (예: 50000-2026-MMDD-serial후반부)
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  // serial 뒷 6자리 (예: WELLS-2026-AF93875 → "93875"에서 마지막 5~6자리)
+  const serialTail = serial.replace(/\D/g, '').slice(-6).padStart(6, '0');
+  const noText = `No. ${amount}-${now.getFullYear()}-${mm}${dd}-${serialTail}`;
+  ctx.fillText(noText, noCenterX, noCenterY);
 
   return canvas.toBuffer('image/png');
-}
-
-/**
- * 원본 텍스트를 완전히 가리는 오버레이 박스 그리기
- * - 중앙: 완전 불투명 검정 (원본이 비치지 않음)
- * - 좌우: 부드러운 페이드아웃 (경계가 두드러지지 않음)
- * - 상하: 부드러운 페이드아웃
- */
-function drawOverlayBox(ctx, x, y, w, h) {
-  ctx.save();
-  // 가로 페이드를 위한 그라디언트
-  const horizFade = 0.10; // 좌우 10%씩 페이드 (완전 불투명 영역을 넓게)
-  const vertFade = 0.18;  // 상하 18%씩 페이드 (위/아래로 자연스럽게 사라짐)
-
-  // 중앙은 완전 불투명, 좌우/상하 가장자리만 부드럽게 페이드
-  const grad = ctx.createLinearGradient(x, 0, x + w, 0);
-  grad.addColorStop(0, 'rgba(8,8,8,0)');
-  grad.addColorStop(horizFade, 'rgba(8,8,8,1)');
-  grad.addColorStop(1 - horizFade, 'rgba(8,8,8,1)');
-  grad.addColorStop(1, 'rgba(8,8,8,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(x, y, w, h);
-
-  // 위쪽 페이드 (alpha 마스킹)
-  ctx.globalCompositeOperation = 'destination-out';
-  const topFade = ctx.createLinearGradient(0, y, 0, y + h * vertFade);
-  topFade.addColorStop(0, 'rgba(0,0,0,1)');
-  topFade.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = topFade;
-  ctx.fillRect(x, y, w, h * vertFade);
-
-  // 아래쪽 페이드
-  const botFade = ctx.createLinearGradient(0, y + h * (1 - vertFade), 0, y + h);
-  botFade.addColorStop(0, 'rgba(0,0,0,0)');
-  botFade.addColorStop(1, 'rgba(0,0,0,1)');
-  ctx.fillStyle = botFade;
-  ctx.fillRect(x, y + h * (1 - vertFade), w, h * vertFade);
-  ctx.restore();
 }
 
 module.exports = {
