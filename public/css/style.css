@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────
-   K-웰스몰 - 공통 스타일시트
+   AITC 몰 - 공통 스타일시트
    ───────────────────────────────────────────── */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -118,7 +118,7 @@ button { cursor: pointer; font-family: inherit; }
   position: absolute;
   inset: 0;
   /* 동영상 위에 어두운 그라데이션 — 텍스트 가독성 확보
-     + K-웰스몰 테마 네이비 톤 반영 */
+     + AITC 몰 테마 네이비 톤 반영 */
   background:
     radial-gradient(ellipse at center,
       rgba(10,14,42,0.55) 0%,
