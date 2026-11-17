@@ -1,4 +1,4 @@
-// K-웰스몰 발주서 생성 페이지 (/admin/po)
+// AITC 몰 발주서 생성 페이지 (/admin/po)
 (function () {
   'use strict';
 

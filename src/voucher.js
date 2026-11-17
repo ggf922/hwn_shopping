@@ -62,7 +62,7 @@ function generateSerialCode() {
 
 /**
  * 풀 시리얼 코드 생성 (WELLS-YYYY-XXNNNNN)
- * K-웰스몰 브랜드. 하위 호환성을 위해 기존 HWN-2026-XXXXX 상품권도 유효.
+ * AITC 몰 브랜드. 하위 호환성을 위해 기존 HWN-2026-XXXXX 상품권도 유효.
  */
 function generateFullSerial() {
   const year = new Date().getFullYear();
@@ -70,9 +70,9 @@ function generateFullSerial() {
 }
 
 /**
- * K-웰스몰 상품권 이미지 PNG 버퍼 생성
+ * AITC 몰 상품권 이미지 PNG 버퍼 생성
  *
- * 템플릿: public/images/voucher-template.png (K-웰스몰 디자인, 2026-10 신규)
+ * 템플릿: public/images/voucher-template.png (AITC 몰 디자인, 2026-10 신규)
  *   - 중앙 금액 자리, 등록코드 박스, 바코드 아래, 좌하단 No. 모두 빈 상태
  *   - 그 위에 금액(센터), 등록코드, 바코드숫자, No.번호만 그려 넣음
  *
